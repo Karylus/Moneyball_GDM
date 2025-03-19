@@ -3,13 +3,6 @@ from langchain_ollama import ChatOllama
 from langchain_core.tools import tool
 from src.agentes.herramientas_analisis import *
 
-
-@tool
-def analizador_equipos(equipo: str):
-    """Obtiene estadísticas de un equipo."""
-    return obtener_estadisticas_equipo(equipo)
-
-
 @tool
 def analizador_jugadores(jugador1: str):
     """Obtiene estadísticas de un jugador."""
@@ -21,15 +14,29 @@ def comparador_jugadores(jugador1: str, jugador2: str):
     """Compara a dos jugadores."""
     return comparar_jugadores(jugador1, jugador2)
 
+@tool()
+def encontrar_jugadores_precio(posicion: str, precio_max: int) -> str:
+    """
+    Encuentra los jugadores para la posición dada en el rango de precio_max.
 
-MODEL_NAME = "phi4:latest"
+    Parámetros:
+    - posicion (str): La posición a buscar (ej. "Delantero", "Centrocampista").
+    - precio_max (int): Precio máximo permitido para el fichaje.
+
+    Return:
+    - Un JSON con la información de los jugadores encontrados.
+    """
+    return listar_jugadores_por_posicion_y_precio(posicion,precio_max)
+
+
+MODEL_NAME = "gemma3:12b"
 TEMPERATURE = 0.2
 TOP_P = 0.1
-LISTA_TOOLS = [analizador_equipos, analizador_jugadores, comparador_jugadores]
+LISTA_TOOLS = [analizador_jugadores, comparador_jugadores, encontrar_jugadores_precio]
 
 
 def configurar_llm() -> ChatOllama:
-    """Configura y retorna el modelo de lenguaje en modo chat con herramientas enlazadas."""
+    """Configura y devuelve el modelo en modo chat."""
     return ChatOllama(
         model=MODEL_NAME,
         temperature=TEMPERATURE,
@@ -39,7 +46,7 @@ def configurar_llm() -> ChatOllama:
 
 
 def configurar_agente():
-    """Configura y retorna el agente sin mezclar la lógica de ejecución."""
+    """Configura y devuelve el agente."""
     llm = configurar_llm()
     return initialize_agent(
         tools=LISTA_TOOLS,
