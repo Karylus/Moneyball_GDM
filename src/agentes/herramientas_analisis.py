@@ -39,9 +39,14 @@ def listar_jugadores_por_posicion_y_precio(posicion: str, precio_max: int) -> st
     if df_filtrado.empty:
         return f"No se encontraron jugadores para la posición {posicion}."
 
-    df_filtrado = df_filtrado[df_filtrado['market_value_in_eur'] <= (precio_max * 1000000)]
+    tope_precio = precio_max * 1000000
+    df_filtrado = df_filtrado[df_filtrado['market_value_in_eur'] <= precio_max]
 
     if df_filtrado.empty:
         return f"No hay jugadores disponibles en {posicion} por menos de {precio_max} millones."
 
-    return df_filtrado.to_json(indent=2, orient="records")
+    df_filtrado = df_filtrado.sort_values(by='market_value_in_eur', ascending=False)
+
+    mejor_jugador = df_filtrado.iloc[0].to_dict()
+
+    return json.dumps(mejor_jugador, indent=2)

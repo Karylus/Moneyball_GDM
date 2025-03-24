@@ -29,7 +29,7 @@ def encontrar_jugadores_precio(posicion: str, precio_max: int) -> str:
     return listar_jugadores_por_posicion_y_precio(posicion,precio_max)
 
 
-MODEL_NAME = "gemma3:12b"
+MODEL_NAME = "mistral-nemo:12b"
 TEMPERATURE = 0.2
 TOP_P = 0.1
 LISTA_TOOLS = [analizador_jugadores, comparador_jugadores, encontrar_jugadores_precio]
