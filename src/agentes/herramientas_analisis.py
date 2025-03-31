@@ -21,6 +21,7 @@ def obtener_info_jugador(jugador: str) -> str:
 
     return json.dumps(jugador_data.to_dict(), indent=2)
 
+
 def comparar_jugadores(jugador1: str, jugador2: str) -> str:
     info_jugador1 = obtener_info_jugador(jugador1)
     info_jugador2 = obtener_info_jugador(jugador2)

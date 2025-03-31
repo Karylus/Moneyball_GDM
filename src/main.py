@@ -1,56 +1,76 @@
 import sys
 import os
+import json
 sys.path.append(os.path.abspath("src"))
 
 from agentes.analista_datos import configurar_agente
 from utils.logger import logger
 from langchain_core.prompts import ChatPromptTemplate
 
+def solicitar_lista(prompt_msg: str):
+    # Se asume que el usuario ingresa elementos separados por comas
+    entrada = input(prompt_msg).strip()
+    # Se remueven espacios y se genera una lista
+    return [elem.strip() for elem in entrada.split(",") if elem.strip()]
+
 if __name__ == "__main__":
     logger.info("Iniciando agente experto...")
-    agente = configurar_agente()  # Asegúrate de que en la configuración se incluya memoria (p.ej., ConversationBufferMemory)
+    agente = configurar_agente()  # Se crea una única instancia con memoria integrada
     logger.info("Agente listo.")
 
-    # Obtención de datos iniciales
-    posicion = input("Qué posición necesitas para tu equipo: ").strip()
-    precio_max = input("Ingrese el precio máximo en millones: ").strip()
+    jugadores = solicitar_lista("Ingrese los nombres de los jugadores (separados por comas): ")
 
-    # Prompt inicial
-    prompt_template = ChatPromptTemplate([
+    criterios = solicitar_lista("Ingrese los criterios de evaluación (por ejemplo, velocidad, técnica, física) separados por comas: ")
+
+    prompt_template = ChatPromptTemplate.from_messages([
         (
             "system",
-            "Eres un analista de datos experto de la UEFA con acceso a estadísticas detalladas. "
-            "Responde ÚNICAMENTE con los formatos de acción específicos requeridos por LangChain. "
-            "Mantén las respuestas precisas y basadas en datos. "
-            "No traduzcas los nombres de las posiciones al español, mantenlas en inglés. "
-            "Al precio máximo no debes añadirle ningún 0. "
-            "Si no tienes información, indica claramente 'Datos no disponibles'.\n\n"
-            "Instrucciones clave:\n"
-            "- Usa los datos de la tool para analizar los jugadores en tu respuesta.\n"
-            "- Usa exclusivamente las herramientas proporcionadas (no realices búsquedas externas).\n"
-            "- Formatea números con dos decimales cuando sea relevante (ej: 12.34)."
+            "Eres un experto en puntuar jugadores de fútbol usando sus estadísticas. "
+            "Tu deber es solamente asignar una calificación del 0 al 1 a cada jugador para cada criterio proporcionado, usa 3 decimales siempre. "
+            "No compares los jugadores entre sí; evalúalos individualmente. Devuelve la respuesta en formato CSV. "
+            "La primera línea del CSV debe ser el encabezado con 'Jugador' seguido de los nombres de los criterios. "
+            "Cada línea subsiguiente representa un jugador con sus calificaciones correspondientes, separadas por comas.\n\n"
+            
+            "\nSi no tienes suficiente información para evaluar a un jugador, responde con 'Datos no disponibles'. "
+            "Si recibes una calificación fuera del rango 0-1, ignora la evaluación y responde con 'Datos no disponibles'."
         ),
         (
             "user",
-            "Analiza qué jugadores son {posicion} y tienen precio máximo de {precio_max} millones. Dime sus estadísticas."
+            "Dado el listado de jugadores: {jugadores} y los criterios: {criterios}, "
+            "asigna una calificación (del 0 al 1) para cada jugador en cada criterio, 3 decimales. "
+            "Devuelve el resultado en formato CSV, primera fila 'jugador, criterios' y resto de filas 'nombre, puntuaciones"
         )
     ])
 
-    prompt = prompt_template.format(posicion=posicion, precio_max=int(precio_max))
-    respuesta = agente.invoke({"input": prompt})
-    output = respuesta.get("output", "No hay respuesta")
-    logger.info(f"[Respuesta]:\n{output}")
-    print("Respuesta del agente:")
-    print(output)
+    prompt = prompt_template.format(jugadores=jugadores, criterios=criterios)
+    respuesta_agente = agente.invoke({"input": prompt})
 
-    print("\n(escribe 'exit' o 'salir' para terminar).")
-    while True:
-        user_input = input("Usuario: ").strip()
-        if user_input.lower() in ["exit", "salir"]:
-            break
+    output_agente = respuesta_agente.get("output", "No hay respuesta")
+    print("\n=== Calificaciones del Agente ===")
+    print(output_agente)
 
-        respuesta = agente.invoke({"input": user_input})
-        output = respuesta.get("output", "No hay respuesta")
-        logger.info(f"[Respuesta]:\n{output}")
-        print("Respuesta del agente:")
-        print(output)
+
+    print("\nAhora, ingresa tus calificaciones (del 0 al 1) para cada jugador en cada criterio:")
+    matriz_usuario = []
+    for jugador in jugadores:
+        califs_jugador = []
+        for criterio in criterios:
+            while True:
+                try:
+                    calif = float(input(f"Calificación para {jugador} en {criterio}: ").strip())
+                    if 0 <= calif <= 1:
+                        califs_jugador.append(calif)
+                        break
+                    else:
+                        print("La calificación debe estar entre 0 y 1.")
+                except ValueError:
+                    print("Por favor, ingrese un número válido.")
+        matriz_usuario.append(califs_jugador)
+
+    resultado_usuario = {
+        "jugadores": jugadores,
+        "criterios": criterios,
+        "calificaciones_usuario": matriz_usuario
+    }
+    print("\n=== Calificaciones del Usuario ===")
+    print(json.dumps(resultado_usuario, indent=2, ensure_ascii=False))
