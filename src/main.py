@@ -15,7 +15,7 @@ def solicitar_lista(prompt_msg: str):
 
 if __name__ == "__main__":
     logger.info("Iniciando agente experto...")
-    agente = configurar_agente()  # Se crea una única instancia con memoria integrada
+    agente = configurar_agente()
     logger.info("Agente listo.")
 
     jugadores = solicitar_lista("Ingrese los nombres de los jugadores (separados por comas): ")
@@ -25,20 +25,33 @@ if __name__ == "__main__":
     prompt_template = ChatPromptTemplate.from_messages([
         (
             "system",
-            "Eres un experto en puntuar jugadores de fútbol usando sus estadísticas. "
+            "Eres un analista de fútbol experto en evaluar jugadores. "
             "Tu deber es solamente asignar una calificación del 0 al 1 a cada jugador para cada criterio proporcionado, usa 3 decimales siempre. "
-            "No compares los jugadores entre sí; evalúalos individualmente. Devuelve la respuesta en formato CSV. "
-            "La primera línea del CSV debe ser el encabezado con 'Jugador' seguido de los nombres de los criterios. "
-            "Cada línea subsiguiente representa un jugador con sus calificaciones correspondientes, separadas por comas.\n\n"
+            "No compares los jugadores entre sí; evalúalos individualmente. "
             
-            "\nSi no tienes suficiente información para evaluar a un jugador, responde con 'Datos no disponibles'. "
+            "DEBES devolver la respuesta en formato CSV EXACTO, con los siguientes requerimientos:\n\n"
+            "- La salida debe comenzar con la línea EXACTA: ```csv\n\n"
+            "- La primera línea debe ser el encabezado con las columnas: Jugador,Velocidad,Técnica,Resistencia\n"
+            "- Cada línea posterior debe contener el nombre del jugador y las calificaciones (números enteros del 1 al 5) para cada criterio, separadas por comas, sin espacios extra.\n"
+            "- La salida debe finalizar con una línea que contenga solo ```\n\n"
+            "Ejemplo de salida EXACTA:\n"
+            "```csv\n"
+            "Jugador,Velocidad,Técnica,Resistencia\n"
+            "Vinicius Jr,5,4,3\n"
+            "Mbappé,5,5,4\n"
+            "Haaland,4,5,5\n"
+            "```\n\n"
+            
+            "Si no puedes generar la salida en ese formato EXACTO, responde con: 'ERROR: Formato CSV no válido'."
+            "Si no tienes suficiente información para evaluar a un jugador, responde con 'Datos no disponibles'. "
             "Si recibes una calificación fuera del rango 0-1, ignora la evaluación y responde con 'Datos no disponibles'."
         ),
         (
             "user",
             "Dado el listado de jugadores: {jugadores} y los criterios: {criterios}, "
             "asigna una calificación (del 0 al 1) para cada jugador en cada criterio, 3 decimales. "
-            "Devuelve el resultado en formato CSV, primera fila 'jugador, criterios' y resto de filas 'nombre, puntuaciones"
+            "Devuelve el resultado en el formato CSV EXACTO descrito."
+            "No me des las estadísticas ni un análisis, solo la tabla CSV. "
         )
     ])
 
@@ -74,3 +87,4 @@ if __name__ == "__main__":
     }
     print("\n=== Calificaciones del Usuario ===")
     print(json.dumps(resultado_usuario, indent=2, ensure_ascii=False))
+
