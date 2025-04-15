@@ -7,15 +7,20 @@ from langchain.prompts import MessagesPlaceholder
 
 
 @tool
-def analizador_jugadores(jugador1: str):
-    """Obtiene estadísticas de un jugador."""
-    return obtener_info_jugador(jugador1)
+def analizador_jugador(jugador: str):
+    """
+    Obtiene las estadísticas de un solo jugador.
+
+    :param jugador: Nombre del único jugador a buscar.
+    :return: Un JSON con la información del jugador.
+    """
+    return obtener_info_jugador(jugador)
 
 
-#@tool()
-#def comparador_jugadores(jugador1: str, jugador2: str):
-#    """Compara a dos jugadores."""
-#    return comparar_jugadores(jugador1, jugador2)
+@tool()
+def comparador_jugadores(jugador1: str, jugador2: str):
+    """Compara a dos jugadores."""
+    return comparar_jugadores(jugador1, jugador2)
 
 
 @tool()
@@ -33,10 +38,44 @@ def encontrar_jugadores_precio(posicion: str, precio_max: int) -> str:
     return listar_jugadores_por_posicion_y_precio(posicion,precio_max)
 
 
+@tool()
+def explicar_estadisticas(query: list) -> list:
+    """
+    Explica el significado de las estadísticas de la query.
+
+    :param query: Lista de estadísticas a consultar.
+    :return: Una lista de cadenas con el nombre de la estadística y su explicación.
+    """
+    df = cargar_explicacion_estadisticas()
+
+    if isinstance(df, str):
+        return ["Error al cargar los datos."]
+
+    query_lower = [q.lower() for q in query]
+    df['stat_lower'] = df['stat'].str.lower()
+
+    # Filtrar estadísticas encontradas
+    df_filtrado = df[df['stat_lower'].isin(query_lower)]
+
+    # Crear lista de explicaciones encontradas
+    explicaciones = [
+        f"{row['stat']}: {row['description']}"
+        for _, row in df_filtrado.iterrows()
+    ]
+
+    # Identificar estadísticas no encontradas
+    no_encontradas = [q for q in query if q.lower() not in df_filtrado['stat_lower'].values]
+
+    if no_encontradas:
+        explicaciones.append(f"No se encontraron las siguientes estadísticas: {', '.join(no_encontradas)}")
+
+    return explicaciones
+
+
 MODEL_NAME = "mistral-nemo:12b"
 TEMPERATURE = 0.2
 TOP_P = 0.1
-LISTA_TOOLS = [analizador_jugadores, encontrar_jugadores_precio]
+LISTA_TOOLS = [analizador_jugador]
 
 
 def configurar_llm() -> ChatOllama:
@@ -45,7 +84,7 @@ def configurar_llm() -> ChatOllama:
         model=MODEL_NAME,
         temperature=TEMPERATURE,
         top_p=TOP_P,
-        num_ctx=4096,
+        num_ctx=8192,
     )
 
 

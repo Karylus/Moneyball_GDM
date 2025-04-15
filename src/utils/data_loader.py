@@ -3,8 +3,9 @@ import pandas as pd
 import unidecode
 
 DATA_FOLDER = os.path.join(os.path.dirname(__file__), "..", "data")
-JUGADORES_FBREF = os.path.join(DATA_FOLDER, "fbref_players_with_market_value.csv")
+JUGADORES_FBREF = os.path.join(DATA_FOLDER, "fbref_full_stats.csv")
 JUGADORES_TRANSFERMARKT = os.path.join(DATA_FOLDER, "players_transfermarkt.csv")
+EXPLICACIONES_ESTADISTICAS = os.path.join(DATA_FOLDER, "fbref_stats_explained.json")
 
 def normalizar_nombre(nombre):
     """Normaliza el nombre de un jugador para que se pueda buscar desde la entrada."""
@@ -15,6 +16,15 @@ def cargar_estadisticas_jugadores():
     try:
         df = pd.read_csv(JUGADORES_FBREF)
         df['normalized_name'] = df['Player'].apply(normalizar_nombre)
+        return df
+
+    except Exception as e:
+        return f"Error al leer los datos: {str(e)}"
+
+def cargar_explicacion_estadisticas():
+    """Carga el JSON de explicaciones de estadísticas y lo devuelve como DataFrame."""
+    try:
+        df = pd.read_json(EXPLICACIONES_ESTADISTICAS)
         return df
 
     except Exception as e:

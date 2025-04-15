@@ -1,11 +1,24 @@
+import csv
 import sys
 import os
 import json
+from io import StringIO
+
 sys.path.append(os.path.abspath("src"))
+
+if not sys.warnoptions:
+    import warnings
+    warnings.simplefilter("ignore")
 
 from agentes.analista_datos import configurar_agente
 from utils.logger import logger
+from utils.matrices import generar_flpr, calcular_flpr_comun
 from langchain_core.prompts import ChatPromptTemplate
+
+with open('src/data/fbref_stats_explained.json', 'r', encoding='utf-8') as f:
+    explicaciones_stats = json.load(f)
+
+explicaciones_formateadas = "\n".join([f"{clave}: {valor}" for clave, valor in explicaciones_stats.items() if not clave.startswith("_")])
 
 def solicitar_lista(prompt_msg: str):
     # Se asume que el usuario ingresa elementos separados por comas
@@ -26,32 +39,23 @@ if __name__ == "__main__":
         (
             "system",
             "Eres un analista de fútbol experto en evaluar jugadores. "
-            "Tu deber es solamente asignar una calificación del 0 al 1 a cada jugador para cada criterio proporcionado, usa 3 decimales siempre. "
+            "Tu deber es asignar una calificación lingüística (Muy Bajo, Bajo, Medio, Alto, Muy Alto) a cada jugador dado para cada criterio proporcionado. "
             "No compares los jugadores entre sí; evalúalos individualmente. "
-            
-            "DEBES devolver la respuesta en formato CSV EXACTO, con los siguientes requerimientos:\n\n"
-            "- La salida debe comenzar con la línea EXACTA: ```csv\n\n"
-            "- La primera línea debe ser el encabezado con las columnas: Jugador,Velocidad,Técnica,Resistencia\n"
-            "- Cada línea posterior debe contener el nombre del jugador y las calificaciones (números enteros del 1 al 5) para cada criterio, separadas por comas, sin espacios extra.\n"
-            "- La salida debe finalizar con una línea que contenga solo ```\n\n"
-            "Ejemplo de salida EXACTA:\n"
-            "```csv\n"
-            "Jugador,Velocidad,Técnica,Resistencia\n"
-            "Vinicius Jr,5,4,3\n"
-            "Mbappé,5,5,4\n"
-            "Haaland,4,5,5\n"
-            "```\n\n"
-            
+            "Responde en formato CSV\n "
+
+            "Output format:\n\n"
+            "1. La Primera linea es: ```csv\n"
+            "2. El encabezado con los campos: Jugador, y la lista de todos los criterios separados por comas\n"
+            "3. Una linea por cada jugador y las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.\n"
+            "4. Ultima linea: ```\n\n"
+
             "Si no puedes generar la salida en ese formato EXACTO, responde con: 'ERROR: Formato CSV no válido'."
-            "Si no tienes suficiente información para evaluar a un jugador, responde con 'Datos no disponibles'. "
-            "Si recibes una calificación fuera del rango 0-1, ignora la evaluación y responde con 'Datos no disponibles'."
         ),
         (
             "user",
             "Dado el listado de jugadores: {jugadores} y los criterios: {criterios}, "
-            "asigna una calificación (del 0 al 1) para cada jugador en cada criterio, 3 decimales. "
-            "Devuelve el resultado en el formato CSV EXACTO descrito."
-            "No me des las estadísticas ni un análisis, solo la tabla CSV. "
+            "asigna una calificación lingüística (Muy Bajo, Bajo, Medio, Alto, Muy Alto) para cada jugador en cada criterio. "
+            "Devuelve el resultado en formato el CSV descrito."
         )
     ])
 
@@ -62,29 +66,105 @@ if __name__ == "__main__":
     print("\n=== Calificaciones del Agente ===")
     print(output_agente)
 
+    matriz_agente = []
+    try:
+        csv_data = StringIO(output_agente.replace("```csv", "").replace("```", "").strip())
+        reader = csv.DictReader(csv_data)
 
-    print("\nAhora, ingresa tus calificaciones (del 0 al 1) para cada jugador en cada criterio:")
+        for row in reader:
+            row_normalizado = {k.lower().strip(): v for k, v in row.items()}
+
+            calificaciones = []
+            for criterio in criterios:
+                if criterio in row_normalizado:
+                    calificaciones.append(str(row_normalizado[criterio]))
+                else:
+                    print(
+                        f"Advertencia: El criterio '{criterio}' no está presente en los datos del CSV.")
+                    calificaciones.append(0.0)  # Valor predeterminado en caso de ausencia
+            matriz_agente.append(calificaciones)
+
+    except KeyError as e:
+        print(f"ERROR: No se pudo procesar la salida del agente. {e}")
+        sys.exit(1)
+    except Exception as e:
+        print("ERROR: No se pudo procesar la salida del agente.")
+        print(str(e))
+        sys.exit(1)
+
+    print(
+        "\n\nCalifica el desempeño de cada jugador en cada criterio del 1 al 5:")
+    print("1: Muy Bajo, 2: Bajo, 3: Medio, 4: Alto, 5: Muy Alto")
+
+    terminos_opciones = {1: "Muy Bajo", 2: "Bajo", 3: "Medio", 4: "Alto", 5: "Muy Alto"}
+
     matriz_usuario = []
     for jugador in jugadores:
         califs_jugador = []
         for criterio in criterios:
             while True:
                 try:
-                    calif = float(input(f"Calificación para {jugador} en {criterio}: ").strip())
-                    if 0 <= calif <= 1:
-                        califs_jugador.append(calif)
+                    calif = int(input(
+                        f"¿Qué te parece el desempeño de {jugador} en {criterio}? (1-5): ").strip())
+                    if calif in terminos_opciones:
+                        califs_jugador.append(terminos_opciones[calif])
                         break
                     else:
-                        print("La calificación debe estar entre 0 y 1.")
+                        print("Por favor, ingrese un número válido entre 1 y 5.")
                 except ValueError:
-                    print("Por favor, ingrese un número válido.")
+                    print("Por favor, ingrese un número válido entre 1 y 5.")
         matriz_usuario.append(califs_jugador)
 
-    resultado_usuario = {
-        "jugadores": jugadores,
-        "criterios": criterios,
-        "calificaciones_usuario": matriz_usuario
-    }
     print("\n=== Calificaciones del Usuario ===")
-    print(json.dumps(resultado_usuario, indent=2, ensure_ascii=False))
+    output_usuario = StringIO()
+    writer = csv.writer(output_usuario)
+    writer.writerow(["Jugador"] + criterios)
+    for jugador, calificaciones in zip(jugadores, matriz_usuario):
+        writer.writerow([jugador] + calificaciones)
+    print(output_usuario.getvalue())
 
+    flpr_matrices_usuario = {}
+    for idx, criterio in enumerate(criterios):
+        calificaciones_criterio = [fila[idx] for fila in matriz_usuario]
+        flpr_matrices_usuario[criterio] = generar_flpr(calificaciones_criterio)
+
+    print("\n=== Matrices FLPR del Usuario ===")
+    for criterio, flpr in flpr_matrices_usuario.items():
+        print(f"\nFLPR para el criterio '{criterio}':")
+        print(flpr)
+
+    flpr_matrices_agente = {}
+    for idx, criterio in enumerate(criterios):
+        calificaciones_criterio = [fila[idx] for fila in matriz_agente]
+        flpr_matrices_agente[criterio] = generar_flpr(calificaciones_criterio)
+
+    print("\n=== Matrices FLPR del Agente ===")
+    for criterio, flpr in flpr_matrices_agente.items():
+        print(f"\nFLPR para el criterio '{criterio}':")
+        print(flpr)
+
+    flpr_matrices_comunes = {}
+    for criterio in criterios:
+        flpr_agente = flpr_matrices_agente[criterio]
+        flpr_usuario = flpr_matrices_usuario[criterio]
+        flpr_comun = calcular_flpr_comun(flpr_agente, flpr_usuario)
+        flpr_matrices_comunes[criterio] = flpr_comun
+
+    print("\n=== Matrices Comunes de Preferencia por Característica===")
+    for criterio, flpr_comun in flpr_matrices_comunes.items():
+        print(f"\nMatriz común para el criterio '{criterio}':")
+        print(flpr_comun)
+
+    # Calcular la matriz FLPR global
+    matriz_flpr_global = None
+    for criterio, flpr_comun in flpr_matrices_comunes.items():
+        if matriz_flpr_global is None:
+            matriz_flpr_global = flpr_comun.copy()
+        else:
+            matriz_flpr_global += flpr_comun
+
+    # Promediar las matrices comunes
+    matriz_flpr_global /= len(flpr_matrices_comunes)
+
+    print("\n=== Matriz FLPR Global ===")
+    print(matriz_flpr_global)
