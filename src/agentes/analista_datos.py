@@ -84,7 +84,7 @@ def configurar_llm() -> ChatOllama:
         model=MODEL_NAME,
         temperature=TEMPERATURE,
         top_p=TOP_P,
-        num_ctx=8192,
+        num_ctx=16384
     )
 
 
