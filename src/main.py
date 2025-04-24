@@ -13,7 +13,9 @@ if not sys.warnoptions:
 
 from agentes.analista_datos import configurar_agente
 from utils.logger import logger
-from utils.matrices import generar_flpr, calcular_flpr_comun, calcular_matriz_similitud, calcular_cr, calcular_ranking_jugadores
+from utils.matrices import generar_flpr, calcular_flpr_comun
+from utils.consenso import calcular_matriz_similitud, calcular_cr
+from utils.ranking import calcular_ranking_jugadores
 from langchain_core.prompts import ChatPromptTemplate
 
 with open('src/data/fbref_stats_explained.json', 'r', encoding='utf-8') as f:
