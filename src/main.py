@@ -3,6 +3,7 @@ import sys
 import os
 import json
 import random
+import unicodedata
 from io import StringIO
 
 sys.path.append(os.path.abspath("src"))
@@ -10,6 +11,32 @@ sys.path.append(os.path.abspath("src"))
 if not sys.warnoptions:
     import warnings
     warnings.simplefilter("ignore")
+
+def normalizar_texto(texto):
+    """
+    Normaliza un texto eliminando tildes y otros caracteres diacríticos,
+    y convirtiendo todo a minúsculas.
+
+    Args:
+        texto (str): Texto a normalizar
+
+    Returns:
+        str: Texto normalizado sin tildes y en minúsculas
+    """
+    # Si el texto es None, devolver una cadena vacía
+    if texto is None:
+        return ""
+
+    # Convertir a string si no lo es
+    if not isinstance(texto, str):
+        texto = str(texto)
+
+    # Convertir a minúsculas
+    texto = texto.lower()
+
+    # Normalizar NFD y eliminar diacríticos
+    return ''.join(c for c in unicodedata.normalize('NFD', texto)
+                  if not unicodedata.combining(c))
 
 from agentes.analista_datos import configurar_agente
 from utils.logger import logger
@@ -63,9 +90,9 @@ if __name__ == "__main__":
             "Responde SOLO en el formato CSV\n "
 
             "Output format:\n\n"
-            "1. La Primera linea es: ```csv\n"
-            "2. El encabezado será con los campos: 'Jugador', y la lista de todos los criterios separados por comas\n"
-            "3. Una linea extra por cada nombre de jugador y SOLO las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.\n"
+            "1. La Primera linea es: ```CSV\n"
+            "2. El encabezado será con los campos: 'Jugador', y cada criterio separado por comas\n"
+            "3. Una linea extra con cada nombre de jugador junto a SOLO sus calificaciones lingüísticas, separadas por comas.\n"
             "4. Ultima linea: ```\n\n"
 
             "Si no puedes generar la salida en ese formato EXACTO, responde con: 'ERROR: Formato CSV no válido'."
@@ -93,7 +120,7 @@ if __name__ == "__main__":
             mensaje_error = """
             Tu respuesta anterior no tenía el formato CSV correcto. Por favor, intenta de nuevo.
             Recuerda que debes responder con el siguiente formato exacto:
-            "1. La Primera linea es: ```csv\n"
+            "1. La Primera linea es: ```CSV\n"
             "2. El encabezado tendrá los campos: 'Jugador', y la lista de todos los criterios separados por comas\n"
             "3. Una linea extra por cada nombre de jugador y SOLO las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.\n"
             "4. Ultima linea: ```\n\n"
@@ -113,14 +140,16 @@ if __name__ == "__main__":
 
         try:
             matriz_agente = []
-            csv_data = StringIO(output_agente.replace("```csv", "").replace("```", "").strip())
+            csv_data = StringIO(output_agente.replace("```CSV", "").replace("```", "").strip())
             reader = csv.DictReader(csv_data)
 
             for row in reader:
-                row_normalizado = {k.lower().strip(): v for k, v in row.items()}
+                # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
+                # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
+                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
                 calificaciones = []
                 for criterio in criterios:
-                    criterio_lower = criterio.lower()
+                    criterio_lower = normalizar_texto(criterio)
                     if criterio_lower in row_normalizado:
                         calificaciones.append(str(row_normalizado[criterio_lower]))
                     else:
@@ -130,6 +159,7 @@ if __name__ == "__main__":
                 matriz_agente.append(calificaciones)
 
             # Si llegamos aquí sin excepciones, la respuesta es válida
+            print("✅ CSV procesado correctamente.")
             break
 
         except Exception as e:
@@ -323,6 +353,8 @@ if __name__ == "__main__":
                     # Solo verificamos que se pueda leer al menos una fila
                     next(reader, None)
                     # Si llegamos aquí sin excepciones, la respuesta es válida
+                    print("✅ CSV de re-evaluación procesado correctamente.")
+                    csv_procesado_correctamente = True
                     break
                 except Exception as e:
                     print(f"ERROR: CSV inválido en la re-evaluación (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion}).")
@@ -338,15 +370,18 @@ if __name__ == "__main__":
 
         # Procesar la nueva evaluación del agente
         matriz_agente_nueva = []
+        csv_procesado_correctamente = False
         try:
-            csv_data = StringIO(output_reevaluacion.replace("```csv", "").replace("```", "").strip())
+            csv_data = StringIO(output_reevaluacion.replace("```CSV", "").replace("```", "").strip())
             reader = csv.DictReader(csv_data)
 
             for row in reader:
-                row_normalizado = {k.lower().strip(): v for k, v in row.items()}
+                # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
+                # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
+                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
                 calificaciones = []
                 for criterio in criterios:
-                    criterio_lower = criterio.lower()
+                    criterio_lower = normalizar_texto(criterio)
                     if criterio_lower in row_normalizado:
                         calificaciones.append(str(row_normalizado[criterio_lower]))
                     else:
@@ -354,29 +389,34 @@ if __name__ == "__main__":
                         # Tratar la falta de criterios como un error que debe reintentar
                         raise ValueError(f"Criterio '{criterio}' no encontrado en los datos del CSV.")
                 matriz_agente_nueva.append(calificaciones)
+
+            # Si llegamos aquí sin excepciones, el CSV se procesó correctamente
+            csv_procesado_correctamente = True
+            print("✅ CSV de re-evaluación procesado y validado correctamente.")
         except Exception as e:
             print(f"ERROR: No se pudo procesar la nueva evaluación del agente.")
             print(str(e))
 
             # Si no se pudo procesar la salida, generamos valores lingüísticos aleatorios
-            if intento_actual_reevaluacion >= max_intentos_reevaluacion:
-                print("Generando valores lingüísticos aleatorios para la re-evaluación...")
+            if not csv_procesado_correctamente:
+                if intento_actual_reevaluacion >= max_intentos_reevaluacion:
+                    print("Generando valores lingüísticos aleatorios para la re-evaluación...")
 
-                # Valores lingüísticos disponibles
-                valores_linguisticos = ["Muy Bajo", "Bajo", "Medio", "Alto", "Muy Alto"]
+                    # Valores lingüísticos disponibles
+                    valores_linguisticos = ["Muy Bajo", "Bajo", "Medio", "Alto", "Muy Alto"]
 
-                # Generar matriz con valores aleatorios
-                matriz_agente_nueva = []
-                for _ in jugadores:
-                    calificaciones = []
-                    for _ in criterios:
-                        calificaciones.append(random.choice(valores_linguisticos))
-                    matriz_agente_nueva.append(calificaciones)
+                    # Generar matriz con valores aleatorios
+                    matriz_agente_nueva = []
+                    for _ in jugadores:
+                        calificaciones = []
+                        for _ in criterios:
+                            calificaciones.append(random.choice(valores_linguisticos))
+                        matriz_agente_nueva.append(calificaciones)
 
-                print("Se han generado valores lingüísticos aleatorios para continuar con el programa.")
-            else:
-                # Si no es el último intento, usamos la matriz anterior
-                matriz_agente_nueva = matriz_agente
+                    print("Se han generado valores lingüísticos aleatorios para continuar con el programa.")
+                else:
+                    # Si no es el último intento, usamos la matriz anterior
+                    matriz_agente_nueva = matriz_agente
 
         # Re-evaluación del usuario
         print("\n=== Re-evaluación del usuario ===")
