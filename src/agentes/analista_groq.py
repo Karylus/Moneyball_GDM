@@ -1,10 +1,12 @@
 from langchain.agents import initialize_agent, AgentType
-from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from src.agentes.herramientas_analisis import *
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder
 
+if "GROQ_API_KEY" not in os.environ:
+    os.environ["GROQ_API_KEY"] = "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"
 
 @tool
 def analizador_jugador(jugador: str):
@@ -15,6 +17,17 @@ def analizador_jugador(jugador: str):
     :return: Un JSON con la información del jugador.
     """
     return obtener_info_jugador(jugador)
+
+
+@tool
+def analizador_jugadores(jugadores: list):
+    """
+    Obtiene las estadísticas de múltiples jugadores con una sola llamada.
+
+    :param jugadores: Lista de nombres de jugadores a buscar.
+    :return: Un JSON con la información de todos los jugadores solicitados.
+    """
+    return obtener_info_jugadores(jugadores)
 
 
 @tool()
@@ -72,19 +85,18 @@ def explicar_estadisticas(query: list) -> list:
     return explicaciones
 
 
-MODEL_NAME = "mistral-nemo:12b"
+MODEL_NAME = "llama-3.3-70b-versatile"
 TEMPERATURE = 0.2
 TOP_P = 0.1
-LISTA_TOOLS = [analizador_jugador]
+LISTA_TOOLS = [analizador_jugadores]
 
 
-def configurar_llm() -> ChatOllama:
+def configurar_llm() -> ChatGroq:
     """Configura y devuelve el modelo en modo chat."""
-    return ChatOllama(
+    return ChatGroq(
         model=MODEL_NAME,
         temperature=TEMPERATURE,
         top_p=TOP_P,
-        num_ctx=32000
     )
 
 

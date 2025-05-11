@@ -1,96 +1,111 @@
-import numpy as np
 import pandas as pd
-import os
 from src.utils.data_loader import cargar_estadisticas_jugadores
 
 def calcular_ponderacion_estadisticas(jugador_data):
     """
     Calcula la puntuación ponderada de un jugador basada en sus estadísticas y posición.
+    Utiliza estadísticas por 90 minutos para una comparación más justa entre jugadores
+    con diferentes cantidades de minutos jugados.
 
     Parámetros:
-    - jugador_data (pd.Series): Serie con los datos del jugador.
+    - jugador_data (pd. Series): Serie con los datos del jugador.
 
     Return:
     - float: Puntuación ponderada del jugador.
     """
     posicion = jugador_data['position_group'] if 'position_group' in jugador_data else "Unknown"
 
+    stats_porcentajes = [
+        "Total - Cmp%", "Long - Cmp%", "Save%", "Succ%", "Won%", "SoT%",
+        "Short - Cmp%", "Medium - Cmp%", "G/Sh", "G/SoT", "npxG/Sh", "Tkl%"
+    ]
+
     pesos = {
         "GK": {  # Portero
-            "Total - Cmp%": 0.15,  # Precisión de pases
-            "Long - Cmp%": 0.15,   # Precisión de pases largos
-            "Saves": 0.25,         # Paradas
-            "Save%": 0.25,         # Porcentaje de paradas
-            "CS": 0.20,            # Porterías a cero
+            "Total - Cmp%": 0.94,   # Precisión de pases
+            "Long - Cmp%": 0.94,    # Precisión de pases largos
+            "Saves": 1.56,          # Paradas
+            "Save%": 1.56,          # Porcentaje de paradas
+            "CS": 1.25,             # Porterías a cero
         },
         "Defender": {  # Defensa
-            "Tkl+Int": 0.20,       # Entradas + Intercepciones
-            "Clr": 0.15,           # Despejes
-            "Total - Cmp%": 0.15,  # Precisión de pases
-            "Err": -0.15,          # Errores (negativo)
-            "Blocks": 0.15,        # Bloqueos
-            "Won%": 0.10,          # Porcentaje de duelos aéreos ganados
-            "PrgP": 0.10,          # Pases progresivos
+            "Tkl+Int": 1.25,        # Entradas + Intercepciones
+            "Clr": 0.94,            # Despejes
+            "Total - Cmp%": 0.94,   # Precisión de pases
+            "Err": -0.94,           # Errores (negativo)
+            "Blocks": 0.94,         # Bloqueos
+            "Won%": 0.63,           # Porcentaje de duelos aéreos ganados
+            "PrgP": 0.63,           # Pases progresivos
         },
         "Defensive-Midfielders": {  # Mediocentro defensivo
-            "Tkl+Int": 0.20,       # Entradas + Intercepciones
-            "Total - Cmp%": 0.20,  # Precisión de pases
-            "PrgP": 0.15,          # Pases progresivos
-            "Recov": 0.15,         # Recuperaciones
-            "PrgC": 0.10,          # Conducciones progresivas
-            "KP": 0.10,            # Pases clave
-            "Err": -0.10,          # Errores (negativo)
+            "Tkl+Int": 1.25,        # Entradas + Intercepciones
+            "Total - Cmp%": 1.25,   # Precisión de pases
+            "PrgP": 0.94,           # Pases progresivos
+            "Recov": 0.94,          # Recuperaciones
+            "PrgC": 0.63,           # Conducciones progresivas
+            "KP": 0.63,             # Pases clave
+            "Err": -0.63,           # Errores (negativo)
         },
         "Central Midfielders": {  # Mediocentro
-            "Total - Cmp%": 0.20,  # Precisión de pases
-            "PrgP": 0.15,          # Pases progresivos
-            "KP": 0.15,            # Pases clave
-            "PrgC": 0.15,          # Conducciones progresivas
-            "Tkl+Int": 0.10,       # Entradas + Intercepciones
-            "Ast": 0.15,           # Asistencias
-            "Gls": 0.10,           # Goles
+            "Total - Cmp%": 1.25,   # Precisión de pases
+            "PrgP": 0.94,           # Pases progresivos
+            "KP": 0.94,             # Pases clave
+            "PrgC": 0.94,           # Conducciones progresivas
+            "Tkl+Int": 0.63,        # Entradas + Intercepciones
+            "Ast": 0.94,            # Asistencias
+            "Gls": 0.63,            # Goles
         },
         "Attacking Midfielders": {  # Mediapunta
-            "KP": 0.20,            # Pases clave
-            "Ast": 0.15,           # Asistencias
-            "Gls": 0.15,           # Goles
-            "SCA": 0.15,           # Acciones que crean ocasiones de disparo
-            "PrgC": 0.15,          # Conducciones progresivas
-            "Succ%": 0.10,         # Porcentaje de regates exitosos
-            "Total - Cmp%": 0.10,  # Precisión de pases
+            "KP": 1.25,             # Pases clave
+            "Ast": 0.94,            # Asistencias
+            "Gls": 0.94,            # Goles
+            "SCA": 0.94,            # Acciones que crean ocasiones de disparo
+            "PrgC": 0.94,           # Conducciones progresivas
+            "Succ%": 0.63,          # Porcentaje de regates exitosos
+            "Total - Cmp%": 0.63,   # Precisión de pases
         },
         "Wing-Back": {  # Carrilero
-            "Crs_x": 0.20,         # Centros
-            "PrgC": 0.15,          # Conducciones progresivas
-            "Tkl+Int": 0.15,       # Entradas + Intercepciones
-            "KP": 0.15,            # Pases clave
-            "Ast": 0.15,           # Asistencias
-            "Total - Cmp%": 0.10,  # Precisión de pases
-            "Gls": 0.10,           # Goles
+            "Crs_x": 1.25,          # Centros
+            "PrgC": 0.94,           # Conducciones progresivas
+            "Tkl+Int": 0.94,        # Entradas + Intercepciones
+            "KP": 0.94,             # Pases clave
+            "Ast": 0.94,            # Asistencias
+            "Total - Cmp%": 0.63,   # Precisión de pases
+            "Gls": 0.63,            # Goles
         },
         "Forwards": {  # Delantero
-            "Gls": 0.25,           # Goles
-            "Sh": 0.15,            # Tiros
-            "SoT%": 0.15,          # Porcentaje de tiros a puerta
-            "Ast": 0.10,           # Asistencias
-            "KP": 0.10,            # Pases clave
-            "Succ%": 0.10,         # Porcentaje de regates exitosos
-            "PrgR": 0.15,          # Pases progresivos recibidos
+            "Gls": 1.56,            # Goles
+            "Sh": 0.94,             # Tiros
+            "SoT%": 0.94,           # Porcentaje de tiros a puerta
+            "Ast": 0.63,            # Asistencias
+            "KP": 0.63,             # Pases clave
+            "Succ%": 0.63,          # Porcentaje de regates exitosos
+            "PrgR": 0.94,           # Pases progresivos recibidos
         },
         "Unknown": {  # Posición desconocida - pesos genéricos
-            "Gls": 0.15,           # Goles
-            "Ast": 0.15,           # Asistencias
-            "Total - Cmp%": 0.15,  # Precisión de pases
-            "Tkl+Int": 0.15,       # Entradas + Intercepciones
-            "PrgP": 0.10,          # Pases progresivos
-            "PrgC": 0.10,          # Conducciones progresivas
-            "KP": 0.10,            # Pases clave
-            "SCA": 0.10,           # Acciones que crean ocasiones de disparo
+            "Gls": 0.94,            # Goles
+            "Ast": 0.94,            # Asistencias
+            "Total - Cmp%": 0.94,   # Precisión de pases
+            "Tkl+Int": 0.94,        # Entradas + Intercepciones
+            "PrgP": 0.63,           # Pases progresivos
+            "PrgC": 0.63,           # Conducciones progresivas
+            "KP": 0.63,             # Pases clave
+            "SCA": 0.63,            # Acciones que crean ocasiones de disparo
         }
     }
 
-    # Seleccionar los pesos según la posición
     pesos_posicion = pesos.get(posicion, pesos["Unknown"])
+
+    minutos_por_90 = 1.0
+    if '90s' in jugador_data and not pd.isna(jugador_data['90s']):
+        try:
+            minutos_por_90 = float(jugador_data['90s'])
+            # Si el jugador no ha jugado minutos, usar un valor pequeño para evitar división por cero
+            if minutos_por_90 <= 0:
+                minutos_por_90 = 0.01
+        except (ValueError, TypeError):
+            # Si no se puede convertir a float, usar el valor por defecto
+            pass
 
     # Calcular la puntuación ponderada
     puntuacion = 0
@@ -99,6 +114,11 @@ def calcular_ponderacion_estadisticas(jugador_data):
             # Convertir a float si es posible, si no, usar 0
             try:
                 valor = float(jugador_data[stat]) if not pd.isna(jugador_data[stat]) else 0
+
+                # Normalizar por 90 minutos si no es un porcentaje o ratio
+                if stat not in stats_porcentajes and minutos_por_90 > 0:
+                    valor = valor / minutos_por_90
+
                 puntuacion += valor * peso
             except (ValueError, TypeError):
                 # Si no se puede convertir a float, ignorar esta estadística
@@ -121,7 +141,6 @@ def calcular_ranking_jugadores(flpr_colectiva, jugadores):
     """
     n = flpr_colectiva.shape[0]
     puntuaciones_flpr = []
-    puntuaciones_stats = []
 
     # Calcular puntuaciones FLPR para todos los jugadores
     for i in range(n):
@@ -153,6 +172,8 @@ def calcular_ranking_jugadores(flpr_colectiva, jugadores):
                 # Calcular puntuación basada en estadísticas
                 puntuacion_stats = calcular_ponderacion_estadisticas(jugador_encontrado.iloc[0])
 
+                # Normalizar la puntuación a escala 0-10
+                # Usamos un divisor de 10 para obtener puntuaciones más realistas
                 puntuacion_normalizada = min(10, max(0, puntuacion_stats / 10))
 
         puntuaciones_finales.append((jugador, puntuacion_normalizada))

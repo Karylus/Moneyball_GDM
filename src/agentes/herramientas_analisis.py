@@ -22,6 +22,33 @@ def obtener_info_jugador(jugador: str) -> str:
     return json.dumps(jugador_data.to_dict(), indent=2)
 
 
+def obtener_info_jugadores(jugadores: list) -> str:
+    """
+    Obtiene las estadísticas de múltiples jugadores con una sola carga de datos.
+
+    :param jugadores: Lista de nombres de jugadores a buscar.
+    :return: Un JSON con la información de todos los jugadores solicitados.
+    """
+    df = cargar_estadisticas_jugadores()
+
+    if 'normalized_name' not in df.columns:
+        df['normalized_name'] = df['Player'].apply(normalizar_nombre)
+
+    resultados = {}
+
+    for jugador in jugadores:
+        jugador_normalizado = normalizar_nombre(jugador.strip())
+        mejor_match, score, index = process.extractOne(jugador_normalizado, df['normalized_name'].tolist(), scorer=fuzz.ratio)
+
+        if score < UMBRAL_SIMILITUD:
+            resultados[jugador] = "Datos no disponibles"
+        else:
+            jugador_data = df.iloc[index]
+            resultados[jugador] = jugador_data.to_dict()
+
+    return json.dumps(resultados, indent=2)
+
+
 def comparar_jugadores(jugador1: str, jugador2: str) -> str:
     info_jugador1 = obtener_info_jugador(jugador1)
     info_jugador2 = obtener_info_jugador(jugador2)
