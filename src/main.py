@@ -4,6 +4,7 @@ import os
 import json
 import random
 import unicodedata
+import re
 from io import StringIO
 
 sys.path.append(os.path.abspath("src"))
@@ -15,13 +16,13 @@ if not sys.warnoptions:
 def normalizar_texto(texto):
     """
     Normaliza un texto eliminando tildes y otros caracteres diacríticos,
-    y convirtiendo a minúsculas.
+    convirtiendo a minúsculas y eliminando comillas simples y dobles.
 
     Args:
         texto (str): Texto a normalizar
 
     Returns:
-        str: Texto normalizado sin tildes y en minúsculas
+        str: Texto normalizado sin tildes, sin comillas y en minúsculas
     """
     # Si el texto es None, devolver una cadena vacía
     if texto is None:
@@ -34,11 +35,46 @@ def normalizar_texto(texto):
     # Convertir a minúsculas
     texto = texto.lower()
 
+    # Eliminar comillas simples y dobles
+    texto = texto.replace("'", "").replace('"', "")
+
     # Normalizar NFD y eliminar diacríticos
     return ''.join(c for c in unicodedata.normalize('NFD', texto)
                   if not unicodedata.combining(c))
 
-from agentes.analista_mistral import configurar_agente as configurar_agente_mistral
+def extraer_csv(texto):
+    """
+    Extrae el contenido CSV de un texto que puede contener explicaciones antes o después.
+    Busca el contenido entre marcadores ```csv o ```CSV y ```, o intenta extraer directamente
+    si no encuentra los marcadores.
+
+    Args:
+        texto (str): Texto que puede contener contenido CSV
+
+    Returns:
+        str: Contenido CSV extraído
+    """
+    # Buscar contenido entre ```csv y ```
+    csv_match = re.search(r'```(?:csv|CSV)\s*([\s\S]*?)```', texto)
+
+    if csv_match:
+        # Si encontramos los marcadores, extraemos el contenido entre ellos
+        return csv_match.group(1).strip()
+    else:
+        # Si no hay marcadores, intentamos procesar todo el texto como CSV
+        # Primero eliminamos cualquier texto antes de la primera línea que parezca un encabezado CSV
+        # (línea que contiene varias comas)
+        lines = texto.split('\n')
+        csv_start = 0
+
+        for i, line in enumerate(lines):
+            if line.count(',') >= 2:  # Asumimos que una línea con al menos 3 campos es parte del CSV
+                csv_start = i
+                break
+
+        return '\n'.join(lines[csv_start:]).strip()
+
+from agentes.analista_qwen import configurar_agente as configurar_agente_qwen
 from agentes.analista_gemini import configurar_agente as configurar_agente_gemini
 from agentes.analista_groq import configurar_agente as configurar_agente_groq
 from utils.logger import logger
@@ -60,8 +96,8 @@ def solicitar_lista(prompt_msg: str):
 
 if __name__ == "__main__":
     logger.info("Iniciando agentes expertos...")
-    agente_mistral = configurar_agente_mistral()
-    logger.info("Agente Mistral listo.")
+    agente_qwen = configurar_agente_qwen()
+    logger.info("Agente qwen listo.")
     agente_gemini = configurar_agente_gemini()
     logger.info("Agente Gemini listo.")
     agente_groq = configurar_agente_groq()
@@ -108,11 +144,11 @@ if __name__ == "__main__":
             "Eres un analista de fútbol experto en evaluar jugadores. "
             "Tu deber es asignar una calificación lingüística (Muy Bajo, Bajo, Medio, Alto, Muy Alto) a cada jugador dado para cada criterio proporcionado. "
             "No compares los jugadores entre sí; evalúalos individualmente. Usa la herramienta 'analizador_jugadores'."
-            "Responde SOLO en el formato CSV\n "
+            "Responde siempre SOLO en el formato CSV siguiente, no devuelvas ningún texto adicional\n "
 
             "Output format:\n\n"
             "1. La Primera linea es: ```CSV\n"
-            "2. El encabezado será con los campos: la palabra 'Jugador', y cada criterio separado por comas\n"
+            "2. El encabezado será con los campos: la palabra Jugador, y cada criterio separado por comas\n"
             "3. Una linea extra por cada nombre de jugador junto a SOLO sus calificaciones lingüísticas, separadas por comas.\n"
             "4. Ultima linea: ```\n\n"
 
@@ -122,7 +158,8 @@ if __name__ == "__main__":
             "user",
             "Dado el listado de jugadores: {jugadores} y los criterios: {criterios}, "
             "asigna una calificación lingüística (Muy Bajo, Bajo, Medio, Alto, Muy Alto) para cada jugador en cada criterio. "
-            "Responde usando el formato CSV descrito."
+            "Responde usando el formato CSV descrito. No incluyas texto adicional, solo el CSV.\n"
+            "No uses comillas en ninguna parte de la salida, ni incluyas espacios extra entre los campos.\n\n"
         )
     ])
 
@@ -131,80 +168,57 @@ if __name__ == "__main__":
     max_intentos = 3
     valores_linguisticos = ["Muy Bajo", "Bajo", "Medio", "Alto", "Muy Alto"]
 
-    # Evaluación con el agente Mistral
-    intento_actual = 0
-    matriz_agente_mistral = []
+    # Evaluación con el agente qwen
+    matriz_agente_qwen = []
 
-    print("\n=== Evaluación con el Agente Mistral ===")
-    while intento_actual < max_intentos:
-        intento_actual += 1
+    print("\n=== Evaluación con el Agente qwen ===")
 
-        # Si no es el primer intento, informamos al agente de su error y pedimos que lo corrija
-        if intento_actual > 1:
-            print(f"\nReintentando (intento {intento_actual}/{max_intentos})...")
-            mensaje_error = """
-            Tu respuesta anterior no tenía el formato CSV correcto. Por favor, intenta de nuevo.
-            Recuerda que debes responder con el siguiente formato exacto:
-            "1. La Primera linea es: ```CSV\n"
-            "2. El encabezado tendrá los campos: 'Jugador', y la lista de todos los criterios separados por comas\n"
-            "3. Una linea extra por cada nombre de jugador y SOLO las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.\n"
-            "4. Ultima linea: ```\n\n"
-            """
-            agente_mistral.invoke({"input": mensaje_error})
+    # Un solo intento para el agente qwen, sin reintentos
+    respuesta_agente_qwen = agente_qwen.invoke({"input": prompt})
+    output_agente_qwen = respuesta_agente_qwen.get("output", "No hay respuesta")
 
-        respuesta_agente_mistral = agente_mistral.invoke({"input": prompt})
-        output_agente_mistral = respuesta_agente_mistral.get("output", "No hay respuesta")
+    print("\n=== Calificaciones del Agente qwen ===")
+    print(output_agente_qwen)
 
-        print("\n=== Calificaciones del Agente Mistral ===")
-        print(output_agente_mistral)
+    try:
+        matriz_agente_qwen = []
+        csv_content = extraer_csv(output_agente_qwen)
+        csv_data = StringIO(csv_content)
+        reader = csv.DictReader(csv_data)
 
-        # Verificar si la respuesta contiene un error explícito
-        if "ERROR:" in output_agente_mistral:
-            print(f"El agente Mistral reportó un error. Reintentando...")
-            continue
+        for row in reader:
+            # Normalizar las claves (criterios) pero no los valores (términos lingüísticos)
+            # Sin embargo, eliminamos comillas simples y dobles de los valores
+            row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v.replace("'", "").replace('"', "") if v is not None else "" for k, v in row.items()}
+            calificaciones = []
+            for criterio in criterios:
+                criterio_lower = normalizar_texto(criterio)
+                if criterio_lower in row_normalizado:
+                    calificaciones.append(str(row_normalizado[criterio_lower]))
+                else:
+                    print(f"Advertencia: El criterio '{criterio}' no está presente en los datos del CSV.")
+                    raise ValueError(f"Criterio '{criterio}' no encontrado en los datos del CSV.")
+            matriz_agente_qwen.append(calificaciones)
 
-        try:
-            matriz_agente_mistral = []
-            csv_data = StringIO(output_agente_mistral.replace("```CSV", "").replace("```", "").strip())
-            reader = csv.DictReader(csv_data)
+        # Si llegamos aquí sin excepciones, la respuesta es válida
+        print("✅ CSV procesado correctamente para el agente qwen.")
 
-            for row in reader:
-                # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
-                # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
-                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
-                calificaciones = []
-                for criterio in criterios:
-                    criterio_lower = normalizar_texto(criterio)
-                    if criterio_lower in row_normalizado:
-                        calificaciones.append(str(row_normalizado[criterio_lower]))
-                    else:
-                        print(f"Advertencia: El criterio '{criterio}' no está presente en los datos del CSV.")
-                        # Tratar la falta de criterios como un error que debe reintentar
-                        raise ValueError(f"Criterio '{criterio}' no encontrado en los datos del CSV.")
-                matriz_agente_mistral.append(calificaciones)
+    except Exception as e:
+        print(f"ERROR: No se pudo procesar la salida del agente qwen.")
+        print(str(e))
 
-            # Si llegamos aquí sin excepciones, la respuesta es válida
-            print("✅ CSV procesado correctamente para el agente Mistral.")
-            break
+        # Generamos valores lingüísticos aleatorios inmediatamente si hay un error
+        print("Generando valores lingüísticos aleatorios...")
 
-        except Exception as e:
-            print(f"ERROR: No se pudo procesar la salida del agente Mistral (intento {intento_actual}/{max_intentos}).")
-            print(str(e))
+        # Generar matriz con valores aleatorios
+        matriz_agente_qwen = []
+        for _ in jugadores:
+            calificaciones = []
+            for _ in criterios:
+                calificaciones.append(random.choice(valores_linguisticos))
+            matriz_agente_qwen.append(calificaciones)
 
-            # Si es el último intento, generamos valores lingüísticos aleatorios en lugar de salir con error
-            if intento_actual >= max_intentos:
-                print(f"Se alcanzó el número máximo de intentos ({max_intentos}). Generando valores lingüísticos aleatorios...")
-
-                # Generar matriz con valores aleatorios
-                matriz_agente_mistral = []
-                for _ in jugadores:
-                    calificaciones = []
-                    for _ in criterios:
-                        calificaciones.append(random.choice(valores_linguisticos))
-                    matriz_agente_mistral.append(calificaciones)
-
-                print("Se han generado valores lingüísticos aleatorios para el agente Mistral para continuar con el programa.")
-                break
+        print("Se han generado valores lingüísticos aleatorios para el agente qwen para continuar con el programa.")
 
     # Evaluación con el agente Gemini
     intento_actual = 0
@@ -221,7 +235,7 @@ if __name__ == "__main__":
             Tu respuesta anterior no tenía el formato CSV correcto. Por favor, intenta de nuevo.
             Recuerda que debes responder con el siguiente formato exacto:
             "1. La Primera linea es: ```CSV\n"
-            "2. El encabezado tendrá los campos: 'Jugador', y la lista de todos los criterios separados por comas\n"
+            "2. El encabezado tendrá los campos: Jugador, y la lista de todos los criterios separados por comas\n"
             "3. Una linea extra por cada nombre de jugador y SOLO las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.\n"
             "4. Ultima linea: ```\n\n"
             """
@@ -240,13 +254,15 @@ if __name__ == "__main__":
 
         try:
             matriz_agente_gemini = []
-            csv_data = StringIO(output_agente_gemini.replace("```CSV", "").replace("```", "").strip())
+            # Extraer el contenido CSV de la salida del agente
+            csv_content = extraer_csv(output_agente_gemini)
+            csv_data = StringIO(csv_content)
             reader = csv.DictReader(csv_data)
 
             for row in reader:
-                # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
-                # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
-                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
+                # Normalizar las claves (criterios) pero no los valores (términos lingüísticos)
+                # Sin embargo, eliminamos comillas simples y dobles de los valores
+                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v.replace("'", "").replace('"', "") if v is not None else "" for k, v in row.items()}
                 calificaciones = []
                 for criterio in criterios:
                     criterio_lower = normalizar_texto(criterio)
@@ -296,7 +312,7 @@ if __name__ == "__main__":
             Tu respuesta anterior no tenía el formato CSV correcto. Por favor, intenta de nuevo.
             Recuerda que debes responder con el siguiente formato exacto:
             "1. La Primera linea es: ```CSV\n"
-            "2. El encabezado tendrá los campos: 'Jugador', y la lista de todos los criterios separados por comas\n"
+            "2. El encabezado tendrá los campos: Jugador, y la lista de todos los criterios separados por comas\n"
             "3. Una linea extra por cada nombre de jugador y SOLO las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.\n"
             "4. Ultima linea: ```\n\n"
             """
@@ -315,13 +331,15 @@ if __name__ == "__main__":
 
         try:
             matriz_agente_groq = []
-            csv_data = StringIO(output_agente_groq.replace("```CSV", "").replace("```", "").strip())
+            # Extraer el contenido CSV de la salida del agente
+            csv_content = extraer_csv(output_agente_groq)
+            csv_data = StringIO(csv_content)
             reader = csv.DictReader(csv_data)
 
             for row in reader:
-                # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
-                # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
-                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
+                # Normalizar las claves (criterios) pero no los valores (términos lingüísticos)
+                # Sin embargo, eliminamos comillas simples y dobles de los valores
+                row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v.replace("'", "").replace('"', "") if v is not None else "" for k, v in row.items()}
                 calificaciones = []
                 for criterio in criterios:
                     criterio_lower = normalizar_texto(criterio)
@@ -379,37 +397,37 @@ if __name__ == "__main__":
         matriz_usuario.append(califs_jugador)
 
     flpr_usuario = None
-    flpr_agente_mistral = None
+    flpr_agente_qwen = None
     flpr_agente_gemini = None
     flpr_agente_groq = None
 
     for idx, criterio in enumerate(criterios):
         calificaciones_usuario = [fila[idx] for fila in matriz_usuario]
-        calificaciones_agente_mistral = [fila[idx] for fila in matriz_agente_mistral]
+        calificaciones_agente_qwen = [fila[idx] for fila in matriz_agente_qwen]
         calificaciones_agente_gemini = [fila[idx] for fila in matriz_agente_gemini]
         calificaciones_agente_groq = [fila[idx] for fila in matriz_agente_groq]
 
         flpr_usuario_criterio = generar_flpr(calificaciones_usuario)
-        flpr_agente_mistral_criterio = generar_flpr(calificaciones_agente_mistral)
+        flpr_agente_qwen_criterio = generar_flpr(calificaciones_agente_qwen)
         flpr_agente_gemini_criterio = generar_flpr(calificaciones_agente_gemini)
         flpr_agente_groq_criterio = generar_flpr(calificaciones_agente_groq)
 
         if flpr_usuario is None:
             flpr_usuario = flpr_usuario_criterio
-            flpr_agente_mistral = flpr_agente_mistral_criterio
+            flpr_agente_qwen = flpr_agente_qwen_criterio
             flpr_agente_gemini = flpr_agente_gemini_criterio
             flpr_agente_groq = flpr_agente_groq_criterio
         else:
             flpr_usuario = calcular_flpr_comun(flpr_usuario, flpr_usuario_criterio)
-            flpr_agente_mistral = calcular_flpr_comun(flpr_agente_mistral, flpr_agente_mistral_criterio)
+            flpr_agente_qwen = calcular_flpr_comun(flpr_agente_qwen, flpr_agente_qwen_criterio)
             flpr_agente_gemini = calcular_flpr_comun(flpr_agente_gemini, flpr_agente_gemini_criterio)
             flpr_agente_groq = calcular_flpr_comun(flpr_agente_groq, flpr_agente_groq_criterio)
 
     print("\n=== Matriz FLPR Final del Usuario ===")
     print(flpr_usuario)
 
-    print("\n=== Matriz FLPR Final del Agente Mistral ===")
-    print(flpr_agente_mistral)
+    print("\n=== Matriz FLPR Final del Agente qwen ===")
+    print(flpr_agente_qwen)
 
     print("\n=== Matriz FLPR Final del Agente Gemini ===")
     print(flpr_agente_gemini)
@@ -418,9 +436,9 @@ if __name__ == "__main__":
     print(flpr_agente_groq)
 
     # Calcular matriz FLPR colectiva entre los agentes
-    flpr_agentes_mistral_gemini = calcular_flpr_comun(flpr_agente_mistral, flpr_agente_gemini)
-    flpr_agentes = calcular_flpr_comun(flpr_agentes_mistral_gemini, flpr_agente_groq)
-    print("\n=== Matriz FLPR Colectiva (Agentes Mistral, Gemini y Groq) ===")
+    flpr_agentes_qwen_gemini = calcular_flpr_comun(flpr_agente_qwen, flpr_agente_gemini)
+    flpr_agentes = calcular_flpr_comun(flpr_agentes_qwen_gemini, flpr_agente_groq)
+    print("\n=== Matriz FLPR Colectiva (Agentes qwen, Gemini y Groq) ===")
     print(flpr_agentes)
 
     # Calcular matriz FLPR colectiva entre usuario y agentes
@@ -429,15 +447,15 @@ if __name__ == "__main__":
     print(flpr_colectiva)
 
     # Calcular matrices de similitud
-    matriz_similitud_mistral_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_mistral)
+    matriz_similitud_qwen_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_qwen)
     matriz_similitud_gemini_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_gemini)
     matriz_similitud_groq_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_groq)
-    matriz_similitud_mistral_gemini = calcular_matriz_similitud(flpr_agente_mistral, flpr_agente_gemini)
-    matriz_similitud_mistral_groq = calcular_matriz_similitud(flpr_agente_mistral, flpr_agente_groq)
+    matriz_similitud_qwen_gemini = calcular_matriz_similitud(flpr_agente_qwen, flpr_agente_gemini)
+    matriz_similitud_qwen_groq = calcular_matriz_similitud(flpr_agente_qwen, flpr_agente_groq)
     matriz_similitud_gemini_groq = calcular_matriz_similitud(flpr_agente_gemini, flpr_agente_groq)
 
-    print("\n=== Matriz de Similitud (Usuario y Agente Mistral) ===")
-    print(matriz_similitud_mistral_usuario)
+    print("\n=== Matriz de Similitud (Usuario y Agente qwen) ===")
+    print(matriz_similitud_qwen_usuario)
 
     print("\n=== Matriz de Similitud (Usuario y Agente Gemini) ===")
     print(matriz_similitud_gemini_usuario)
@@ -445,18 +463,176 @@ if __name__ == "__main__":
     print("\n=== Matriz de Similitud (Usuario y Agente Groq) ===")
     print(matriz_similitud_groq_usuario)
 
-    print("\n=== Matriz de Similitud (Agente Mistral y Agente Gemini) ===")
-    print(matriz_similitud_mistral_gemini)
+    print("\n=== Matriz de Similitud (Agente qwen y Agente Gemini) ===")
+    print(matriz_similitud_qwen_gemini)
 
-    print("\n=== Matriz de Similitud (Agente Mistral y Agente Groq) ===")
-    print(matriz_similitud_mistral_groq)
+    print("\n=== Matriz de Similitud (Agente qwen y Agente Groq) ===")
+    print(matriz_similitud_qwen_groq)
 
     print("\n=== Matriz de Similitud (Agente Gemini y Agente Groq) ===")
     print(matriz_similitud_gemini_groq)
 
+    # Mostrar matrices de términos lingüísticos y permitir al usuario corregir sesgos
+    print("\n=== Matrices de Términos Lingüísticos ===")
+    print("Ahora puedes revisar las matrices de términos lingüísticos para identificar posibles sesgos.")
+
+    # Función para mostrar matriz de términos lingüísticos
+    def mostrar_matriz_terminos(matriz, nombre_matriz):
+        print(f"\n--- Matriz de Términos Lingüísticos: {nombre_matriz} ---")
+        print(f"{'Jugador':<15}", end="")
+        for criterio in criterios:
+            print(f"{criterio:<15}", end="")
+        print()
+        for i, jugador in enumerate(jugadores):
+            print(f"{jugador:<15}", end="")
+            for j, criterio in enumerate(criterios):
+                print(f"{matriz[i][j]:<15}", end="")
+            print()
+
+    # Mostrar todas las matrices
+    mostrar_matriz_terminos(matriz_usuario, "Usuario")
+    mostrar_matriz_terminos(matriz_agente_qwen, "Agente qwen")
+    mostrar_matriz_terminos(matriz_agente_gemini, "Agente Gemini")
+    mostrar_matriz_terminos(matriz_agente_groq, "Agente Groq")
+
+    # Preguntar si el usuario quiere modificar alguna matriz
+    modificar_matrices = input("\n¿Deseas modificar alguna matriz para corregir sesgos? (s/n): ").strip().lower()
+
+    if modificar_matrices == 's':
+        while True:
+            print("\nSelecciona la matriz que deseas modificar:")
+            print("1. Matriz del Usuario")
+            print("2. Matriz del Agente qwen")
+            print("3. Matriz del Agente Gemini")
+            print("4. Matriz del Agente Groq")
+            print("5. Terminar modificaciones")
+
+            opcion = input("Ingresa el número de la opción: ").strip()
+
+            if opcion == '5':
+                break
+
+            if opcion not in ['1', '2', '3', '4']:
+                print("Opción no válida. Intenta de nuevo.")
+                continue
+
+            # Seleccionar la matriz a modificar
+            if opcion == '1':
+                matriz_a_modificar = matriz_usuario
+                nombre_matriz = "Usuario"
+            elif opcion == '2':
+                matriz_a_modificar = matriz_agente_qwen
+                nombre_matriz = "Agente qwen"
+            elif opcion == '3':
+                matriz_a_modificar = matriz_agente_gemini
+                nombre_matriz = "Agente Gemini"
+            elif opcion == '4':
+                matriz_a_modificar = matriz_agente_groq
+                nombre_matriz = "Agente Groq"
+
+            # Mostrar la matriz seleccionada
+            mostrar_matriz_terminos(matriz_a_modificar, nombre_matriz)
+
+            # Solicitar índices del valor a modificar
+            while True:
+                try:
+                    jugador_idx = int(input(f"\nIngresa el número del jugador a modificar (1-{len(jugadores)}): ")) - 1
+                    if jugador_idx < 0 or jugador_idx >= len(jugadores):
+                        print(f"Índice de jugador fuera de rango. Debe estar entre 1 y {len(jugadores)}.")
+                        continue
+
+                    criterio_idx = int(input(f"Ingresa el número del criterio a modificar (1-{len(criterios)}): ")) - 1
+                    if criterio_idx < 0 or criterio_idx >= len(criterios):
+                        print(f"Índice de criterio fuera de rango. Debe estar entre 1 y {len(criterios)}.")
+                        continue
+
+                    print(f"\nValor actual: {matriz_a_modificar[jugador_idx][criterio_idx]}")
+                    print("Valores posibles: Muy Bajo, Bajo, Medio, Alto, Muy Alto")
+
+                    nuevo_valor = input("Ingresa el nuevo valor: ").strip()
+                    if nuevo_valor not in valores_linguisticos:
+                        print(f"Valor no válido. Debe ser uno de: {', '.join(valores_linguisticos)}")
+                        continue
+
+                    # Modificar el valor en la matriz
+                    matriz_a_modificar[jugador_idx][criterio_idx] = nuevo_valor
+                    print(f"Valor modificado correctamente.")
+
+                    # Preguntar si desea modificar otro valor en la misma matriz
+                    continuar = input("¿Deseas modificar otro valor en esta matriz? (s/n): ").strip().lower()
+                    if continuar != 's':
+                        break
+
+                except ValueError:
+                    print("Por favor, ingresa un número válido.")
+
+            # Recalcular la matriz FLPR correspondiente
+            if opcion == '1':
+                flpr_usuario = None
+                for idx, criterio in enumerate(criterios):
+                    calificaciones_usuario = [fila[idx] for fila in matriz_usuario]
+                    flpr_usuario_criterio = generar_flpr(calificaciones_usuario)
+                    if flpr_usuario is None:
+                        flpr_usuario = flpr_usuario_criterio
+                    else:
+                        flpr_usuario = calcular_flpr_comun(flpr_usuario, flpr_usuario_criterio)
+                print("\n=== Matriz FLPR del Usuario (Actualizada) ===")
+                print(flpr_usuario)
+            elif opcion == '2':
+                flpr_agente_qwen = None
+                for idx, criterio in enumerate(criterios):
+                    calificaciones_agente_qwen = [fila[idx] for fila in matriz_agente_qwen]
+                    flpr_agente_qwen_criterio = generar_flpr(calificaciones_agente_qwen)
+                    if flpr_agente_qwen is None:
+                        flpr_agente_qwen = flpr_agente_qwen_criterio
+                    else:
+                        flpr_agente_qwen = calcular_flpr_comun(flpr_agente_qwen, flpr_agente_qwen_criterio)
+                print("\n=== Matriz FLPR del Agente qwen (Actualizada) ===")
+                print(flpr_agente_qwen)
+            elif opcion == '3':
+                flpr_agente_gemini = None
+                for idx, criterio in enumerate(criterios):
+                    calificaciones_agente_gemini = [fila[idx] for fila in matriz_agente_gemini]
+                    flpr_agente_gemini_criterio = generar_flpr(calificaciones_agente_gemini)
+                    if flpr_agente_gemini is None:
+                        flpr_agente_gemini = flpr_agente_gemini_criterio
+                    else:
+                        flpr_agente_gemini = calcular_flpr_comun(flpr_agente_gemini, flpr_agente_gemini_criterio)
+                print("\n=== Matriz FLPR del Agente Gemini (Actualizada) ===")
+                print(flpr_agente_gemini)
+            elif opcion == '4':
+                flpr_agente_groq = None
+                for idx, criterio in enumerate(criterios):
+                    calificaciones_agente_groq = [fila[idx] for fila in matriz_agente_groq]
+                    flpr_agente_groq_criterio = generar_flpr(calificaciones_agente_groq)
+                    if flpr_agente_groq is None:
+                        flpr_agente_groq = flpr_agente_groq_criterio
+                    else:
+                        flpr_agente_groq = calcular_flpr_comun(flpr_agente_groq, flpr_agente_groq_criterio)
+                print("\n=== Matriz FLPR del Agente Groq (Actualizada) ===")
+                print(flpr_agente_groq)
+
+        # Recalcular matrices FLPR colectivas
+        flpr_agentes_qwen_gemini = calcular_flpr_comun(flpr_agente_qwen, flpr_agente_gemini)
+        flpr_agentes = calcular_flpr_comun(flpr_agentes_qwen_gemini, flpr_agente_groq)
+        print("\n=== Matriz FLPR Colectiva (Agentes qwen, Gemini y Groq) (Actualizada) ===")
+        print(flpr_agentes)
+
+        flpr_colectiva = calcular_flpr_comun(flpr_agentes, flpr_usuario)
+        print("\n=== Matriz FLPR Colectiva (Usuario y Agentes) (Actualizada) ===")
+        print(flpr_colectiva)
+
+        # Recalcular matrices de similitud
+        matriz_similitud_qwen_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_qwen)
+        matriz_similitud_gemini_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_gemini)
+        matriz_similitud_groq_usuario = calcular_matriz_similitud(flpr_usuario, flpr_agente_groq)
+        matriz_similitud_qwen_gemini = calcular_matriz_similitud(flpr_agente_qwen, flpr_agente_gemini)
+        matriz_similitud_qwen_groq = calcular_matriz_similitud(flpr_agente_qwen, flpr_agente_groq)
+        matriz_similitud_gemini_groq = calcular_matriz_similitud(flpr_agente_gemini, flpr_agente_groq)
+
     # Calcular nivel de consenso con todas las matrices de similitud
-    matrices_similitud = [matriz_similitud_mistral_usuario, matriz_similitud_gemini_usuario, matriz_similitud_groq_usuario, 
-                          matriz_similitud_mistral_gemini, matriz_similitud_mistral_groq, matriz_similitud_gemini_groq]
+    matrices_similitud = [matriz_similitud_qwen_usuario, matriz_similitud_gemini_usuario, matriz_similitud_groq_usuario, 
+                          matriz_similitud_qwen_gemini, matriz_similitud_qwen_groq, matriz_similitud_gemini_groq]
     cr, consenso_alcanzado = calcular_cr(matrices_similitud, consenso_minimo)
     print(f"\n=== Nivel de Consenso ===")
     print(f"Nivel de consenso (CR): {cr}")
@@ -467,12 +643,12 @@ if __name__ == "__main__":
         print("❌ No se ha alcanzado el nivel mínimo de consenso.")
 
     # Guardar las calificaciones en la memoria de los agentes
-    calificaciones_mistral_str = "Mis calificaciones como agente Mistral para los jugadores son:\n"
+    calificaciones_qwen_str = "Mis calificaciones como agente qwen para los jugadores son:\n"
     for i, jugador in enumerate(jugadores):
-        calificaciones_mistral_str += f"{jugador}: "
+        calificaciones_qwen_str += f"{jugador}: "
         for j, criterio in enumerate(criterios):
-            calificaciones_mistral_str += f"{criterio}: {matriz_agente_mistral[i][j]}, "
-        calificaciones_mistral_str = calificaciones_mistral_str.rstrip(", ") + "\n"
+            calificaciones_qwen_str += f"{criterio}: {matriz_agente_qwen[i][j]}, "
+        calificaciones_qwen_str = calificaciones_qwen_str.rstrip(", ") + "\n"
 
     calificaciones_gemini_str = "Mis calificaciones como agente Gemini para los jugadores son:\n"
     for i, jugador in enumerate(jugadores):
@@ -502,11 +678,11 @@ if __name__ == "__main__":
         consenso_alcanzado_nuevo = False
         cr_nuevo = cr
         flpr_usuario_actual = flpr_usuario
-        flpr_agente_mistral_actual = flpr_agente_mistral
+        flpr_agente_qwen_actual = flpr_agente_qwen
         flpr_agente_gemini_actual = flpr_agente_gemini
         flpr_colectiva_actual = flpr_colectiva
         matriz_usuario_actual = matriz_usuario
-        matriz_agente_mistral_actual = matriz_agente_mistral
+        matriz_agente_qwen_actual = matriz_agente_qwen
         matriz_agente_gemini_actual = matriz_agente_gemini
 
         # Bucle de rondas de discusión
@@ -514,12 +690,12 @@ if __name__ == "__main__":
             print(f"\n\n=== RONDA DE DISCUSIÓN {ronda_actual}/{max_rondas_discusion} ===")
 
             # Preparar las cadenas de calificaciones para esta ronda
-            calificaciones_mistral_str = f"Mis calificaciones como agente Mistral para los jugadores (Ronda {ronda_actual}) son:\n"
+            calificaciones_qwen_str = f"Mis calificaciones como agente qwen para los jugadores (Ronda {ronda_actual}) son:\n"
             for i, jugador in enumerate(jugadores):
-                calificaciones_mistral_str += f"{jugador}: "
+                calificaciones_qwen_str += f"{jugador}: "
                 for j, criterio in enumerate(criterios):
-                    calificaciones_mistral_str += f"{criterio}: {matriz_agente_mistral_actual[i][j]}, "
-                calificaciones_mistral_str = calificaciones_mistral_str.rstrip(", ") + "\n"
+                    calificaciones_qwen_str += f"{criterio}: {matriz_agente_qwen_actual[i][j]}, "
+                calificaciones_qwen_str = calificaciones_qwen_str.rstrip(", ") + "\n"
 
             calificaciones_gemini_str = f"Mis calificaciones como agente Gemini para los jugadores (Ronda {ronda_actual}) son:\n"
             for i, jugador in enumerate(jugadores):
@@ -536,7 +712,7 @@ if __name__ == "__main__":
                 calificaciones_usuario_str = calificaciones_usuario_str.rstrip(", ") + "\n"
 
             # Informar a los agentes sobre las calificaciones
-            agente_mistral.invoke({"input": f"Recuerda estas calificaciones que ha dado el usuario: {calificaciones_usuario_str}\n"
+            agente_qwen.invoke({"input": f"Recuerda estas calificaciones que ha dado el usuario: {calificaciones_usuario_str}\n"
                 "No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del usuario recordadas'."})
 
             agente_gemini.invoke({"input": f"Recuerda estas calificaciones que ha dado el usuario: {calificaciones_usuario_str}\n"
@@ -545,8 +721,8 @@ if __name__ == "__main__":
             agente_groq.invoke({"input": f"Recuerda estas calificaciones que ha dado el usuario: {calificaciones_usuario_str}\n"
                 "No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del usuario recordadas'."})
 
-            agente_mistral.invoke({"input": f"Recuerda estas calificaciones que has dado como agente Mistral: {calificaciones_mistral_str}\n "
-                                    f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Mistral recordadas'."})
+            agente_qwen.invoke({"input": f"Recuerda estas calificaciones que has dado como agente qwen: {calificaciones_qwen_str}\n "
+                                    f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente qwen recordadas'."})
 
             agente_gemini.invoke({"input": f"Recuerda estas calificaciones que has dado como agente Gemini: {calificaciones_gemini_str}\n "
                                     f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Gemini recordadas'."})
@@ -555,20 +731,20 @@ if __name__ == "__main__":
                                     f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Groq recordadas'."})
 
             # Informar a cada agente sobre las calificaciones de los otros agentes
-            agente_mistral.invoke({"input": f"El agente Gemini ha dado estas calificaciones: {calificaciones_gemini_str}\n "
+            agente_qwen.invoke({"input": f"El agente Gemini ha dado estas calificaciones: {calificaciones_gemini_str}\n "
                                     f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Gemini recordadas'."})
 
-            agente_mistral.invoke({"input": f"El agente Groq ha dado estas calificaciones: {calificaciones_groq_str}\n "
+            agente_qwen.invoke({"input": f"El agente Groq ha dado estas calificaciones: {calificaciones_groq_str}\n "
                                     f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Groq recordadas'."})
 
-            agente_gemini.invoke({"input": f"El agente Mistral ha dado estas calificaciones: {calificaciones_mistral_str}\n "
-                                    f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Mistral recordadas'."})
+            agente_gemini.invoke({"input": f"El agente qwen ha dado estas calificaciones: {calificaciones_qwen_str}\n "
+                                    f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente qwen recordadas'."})
 
             agente_gemini.invoke({"input": f"El agente Groq ha dado estas calificaciones: {calificaciones_groq_str}\n "
                                     f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Groq recordadas'."})
 
-            agente_groq.invoke({"input": f"El agente Mistral ha dado estas calificaciones: {calificaciones_mistral_str}\n "
-                                    f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Mistral recordadas'."})
+            agente_groq.invoke({"input": f"El agente qwen ha dado estas calificaciones: {calificaciones_qwen_str}\n "
+                                    f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente qwen recordadas'."})
 
             agente_groq.invoke({"input": f"El agente Gemini ha dado estas calificaciones: {calificaciones_gemini_str}\n "
                                     f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Gemini recordadas'."})
@@ -576,10 +752,10 @@ if __name__ == "__main__":
             print(f"\n=== Discusión sobre las valoraciones (Ronda {ronda_actual}/{max_rondas_discusion}) ===")
             print("Ahora puedes discutir con los agentes sobre las valoraciones realizadas.")
             print("(Escribe 'finalizar' para terminar la discusión y continuar con la re-evaluación)")
-            print("(Escribe 'agente:mistral', 'agente:gemini' o 'agente:groq' para dirigir tu pregunta a un agente específico)")
+            print("(Escribe 'agente:qwen', 'agente:gemini' o 'agente:groq' para dirigir tu pregunta a un agente específico)")
 
             discusion_activa = True
-            agente_actual = "mistral"  # Por defecto empezamos con Mistral
+            agente_actual = "qwen"  # Por defecto empezamos con qwen
 
             while discusion_activa:
                 pregunta_usuario = input(f"\nTu pregunta sobre las valoraciones (agente actual: {agente_actual}): ")
@@ -592,7 +768,7 @@ if __name__ == "__main__":
                 # Permitir al usuario cambiar de agente
                 if pregunta_usuario.lower().startswith('agente:'):
                     agente_seleccionado = pregunta_usuario.lower().split(':')[1].strip()
-                    if agente_seleccionado in ['mistral', 'gemini', 'groq']:
+                    if agente_seleccionado in ['qwen', 'gemini', 'groq']:
                         agente_actual = agente_seleccionado
                         print(f"\nCambiado a agente {agente_actual.capitalize()}")
                     else:
@@ -605,12 +781,13 @@ if __name__ == "__main__":
                     Tu objetivo es evaluar críticamente las afirmaciones del usuario.
                     Si el usuario dice algo incorrecto o sin sentido, discútelo y explica por qué no estás de acuerdo.
                     Proporciona argumentos claros y basados en datos o lógica. No aceptes afirmaciones sin fundamento.
+                    Si recibes una orden, explica tu punta de vista pero debes respetar la orden.
                 """
 
                 # Seleccionar el agente adecuado para responder
-                if agente_actual == "mistral":
-                    respuesta = agente_mistral.invoke({"input": prompt_discusion})
-                    print("\nRespuesta del agente Mistral:")
+                if agente_actual == "qwen":
+                    respuesta = agente_qwen.invoke({"input": prompt_discusion})
+                    print("\nRespuesta del agente qwen:")
                 elif agente_actual == "gemini":
                     respuesta = agente_gemini.invoke({"input": prompt_discusion})
                     print("\nRespuesta del agente Gemini:")
@@ -624,23 +801,11 @@ if __name__ == "__main__":
             print(f"\n=== Re-evaluación de jugadores (Ronda {ronda_actual}/{max_rondas_discusion}) ===")
             print("Los agentes volverán a evaluar a los jugadores basándose en la discusión anterior.")
 
-            # Re-evaluación con el agente Mistral
-            prompt_reevaluacion_mistral = f"""
+            # Re-evaluación con el agente qwen
+            prompt_reevaluacion_qwen = f"""
             Basándote en nuestra discusión anterior sobre las valoraciones de los jugadores, 
             por favor, vuelve a evaluar a los siguientes jugadores: {', '.join(jugadores)} 
             según los criterios: {', '.join(criterios)}.
-
-            Recuerda que anteriormente tú diste estas calificaciones como agente Mistral:
-            {calificaciones_mistral_str}
-
-            El agente Gemini dio estas calificaciones:
-            {calificaciones_gemini_str}
-
-            El agente Groq dio estas calificaciones:
-            {calificaciones_groq_str}
-
-            Y el usuario dio estas calificaciones:
-            {calificaciones_usuario_str}
 
             Proporciona tu nueva evaluación en el mismo formato CSV que usaste anteriormente.
             """
@@ -654,8 +819,8 @@ if __name__ == "__main__":
             Recuerda que anteriormente tú diste estas calificaciones como agente Gemini:
             {calificaciones_gemini_str}
 
-            El agente Mistral dio estas calificaciones:
-            {calificaciones_mistral_str}
+            El agente qwen dio estas calificaciones:
+            {calificaciones_qwen_str}
 
             El agente Groq dio estas calificaciones:
             {calificaciones_groq_str}
@@ -675,8 +840,8 @@ if __name__ == "__main__":
             Recuerda que anteriormente tú diste estas calificaciones como agente Groq:
             {calificaciones_groq_str}
 
-            El agente Mistral dio estas calificaciones:
-            {calificaciones_mistral_str}
+            El agente qwen dio estas calificaciones:
+            {calificaciones_qwen_str}
 
             El agente Gemini dio estas calificaciones:
             {calificaciones_gemini_str}
@@ -690,71 +855,72 @@ if __name__ == "__main__":
             max_intentos_reevaluacion = 3
             valores_linguisticos = ["Muy Bajo", "Bajo", "Medio", "Alto", "Muy Alto"]
 
-            # Re-evaluación con el agente Mistral
-            print(f"\n=== Re-evaluación con el Agente Mistral (Ronda {ronda_actual}/{max_rondas_discusion}) ===")
+            # Re-evaluación con el agente qwen
+            print(f"\n=== Re-evaluación con el Agente qwen (Ronda {ronda_actual}/{max_rondas_discusion}) ===")
             intento_actual_reevaluacion = 0
-            output_reevaluacion_mistral = "No hay respuesta"
-            matriz_agente_mistral_nueva = []
+            output_reevaluacion_qwen = "No hay respuesta"
+            matriz_agente_qwen_nueva = []
 
             while intento_actual_reevaluacion < max_intentos_reevaluacion:
                 intento_actual_reevaluacion += 1
 
                 # Si no es el primer intento, informamos al agente de su error y pedimos que lo corrija
                 if intento_actual_reevaluacion > 1:
-                    print(f"\nReintentando re-evaluación Mistral (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion})...")
+                    print(f"\nReintentando re-evaluación qwen (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion})...")
                     mensaje_error = """
                     Tu respuesta anterior no tenía el formato CSV correcto. Por favor, intenta de nuevo.
                     Recuerda que debes responder con el siguiente formato exacto:
                     1. La Primera linea es: ```csv
-                    2. El encabezado será con los campos: 'Jugador', y la lista de todos los criterios separados por comas
+                    2. El encabezado será con los campos: Jugador, y la lista de todos los criterios separados por comas
                     3. Una linea extra por cada nombre de jugador y las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.
                     4. Ultima linea: ```
                     """
-                    agente_mistral.invoke({"input": mensaje_error})
+                    agente_qwen.invoke({"input": mensaje_error})
 
-                respuesta_reevaluacion_mistral = agente_mistral.invoke({"input": prompt_reevaluacion_mistral})
-                output_reevaluacion_mistral = respuesta_reevaluacion_mistral.get("output", "No hay respuesta")
+                respuesta_reevaluacion_qwen = agente_qwen.invoke({"input": prompt_reevaluacion_qwen})
+                output_reevaluacion_qwen = respuesta_reevaluacion_qwen.get("output", "No hay respuesta")
 
                 # Verificar si la respuesta contiene un error explícito
-                if "ERROR:" in output_reevaluacion_mistral:
-                    print(f"El agente Mistral reportó un error en la re-evaluación. Reintentando...")
+                if "ERROR:" in output_reevaluacion_qwen:
+                    print(f"El agente qwen reportó un error en la re-evaluación. Reintentando...")
                     continue
 
-                # Verificar si la respuesta contiene formato CSV
-                if "```csv" in output_reevaluacion_mistral and "```" in output_reevaluacion_mistral:
-                    # Intentar procesar el CSV para verificar que es válido
-                    try:
-                        csv_data = StringIO(output_reevaluacion_mistral.replace("```csv", "").replace("```", "").strip())
-                        reader = csv.DictReader(csv_data)
-                        # Solo verificamos que se pueda leer al menos una fila
-                        next(reader, None)
-                        # Si llegamos aquí sin excepciones, la respuesta es válida
-                        print("✅ CSV de re-evaluación Mistral procesado correctamente.")
-                        csv_procesado_correctamente = True
-                        break
-                    except Exception as e:
-                        print(f"ERROR: CSV inválido en la re-evaluación Mistral (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion}).")
-                        print(str(e))
-                        if intento_actual_reevaluacion >= max_intentos_reevaluacion:
-                            print(f"Se alcanzó el número máximo de intentos ({max_intentos_reevaluacion}). Generando valores lingüísticos aleatorios...")
-                else:
-                    # Si no hay formato CSV, asumimos que es una respuesta válida
+                # Intentar procesar el CSV para verificar que es válido
+                try:
+                    # Extraer el contenido CSV de la salida del agente
+                    csv_content = extraer_csv(output_reevaluacion_qwen)
+                    csv_data = StringIO(csv_content)
+                    reader = csv.DictReader(csv_data)
+                    # Solo verificamos que se pueda leer al menos una fila
+                    next(reader, None)
+                    # Si llegamos aquí sin excepciones, la respuesta es válida
+                    print("✅ CSV de re-evaluación qwen procesado correctamente.")
+                    csv_procesado_correctamente = True
                     break
+                except Exception as e:
+                    print(f"ERROR: CSV inválido en la re-evaluación qwen (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion}).")
+                    print(str(e))
+                    if intento_actual_reevaluacion >= max_intentos_reevaluacion:
+                        print(f"Se alcanzó el número máximo de intentos ({max_intentos_reevaluacion}). Generando valores lingüísticos aleatorios...")
+                    # Si no es el último intento, continuamos con el siguiente intento
+                    continue
 
-            print("\n=== Nueva evaluación del agente Mistral ===")
-            print(output_reevaluacion_mistral)
+            print("\n=== Nueva evaluación del agente qwen ===")
+            print(output_reevaluacion_qwen)
 
-            # Procesar la nueva evaluación del agente Mistral
-            matriz_agente_mistral_nueva = []
+            # Procesar la nueva evaluación del agente qwen
+            matriz_agente_qwen_nueva = []
             csv_procesado_correctamente = False
             try:
-                csv_data = StringIO(output_reevaluacion_mistral.replace("```CSV", "").replace("```", "").strip())
+                # Extraer el contenido CSV de la salida del agente
+                csv_content = extraer_csv(output_reevaluacion_qwen)
+                csv_data = StringIO(csv_content)
                 reader = csv.DictReader(csv_data)
 
                 for row in reader:
-                    # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
-                    # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
-                    row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
+                    # Normalizar las claves (criterios) pero no los valores (términos lingüísticos)
+                    # Sin embargo, eliminamos comillas simples y dobles de los valores
+                    row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v.replace("'", "").replace('"', "") if v is not None else "" for k, v in row.items()}
                     calificaciones = []
                     for criterio in criterios:
                         criterio_lower = normalizar_texto(criterio)
@@ -764,32 +930,32 @@ if __name__ == "__main__":
                             print(f"Advertencia: El criterio '{criterio}' no está presente en los datos del CSV.")
                             # Tratar la falta de criterios como un error que debe reintentar
                             raise ValueError(f"Criterio '{criterio}' no encontrado en los datos del CSV.")
-                    matriz_agente_mistral_nueva.append(calificaciones)
+                    matriz_agente_qwen_nueva.append(calificaciones)
 
                 # Si llegamos aquí sin excepciones, el CSV se procesó correctamente
                 csv_procesado_correctamente = True
-                print("✅ CSV de re-evaluación Mistral procesado y validado correctamente.")
+                print("✅ CSV de re-evaluación qwen procesado y validado correctamente.")
             except Exception as e:
-                print(f"ERROR: No se pudo procesar la nueva evaluación del agente Mistral.")
+                print(f"ERROR: No se pudo procesar la nueva evaluación del agente qwen.")
                 print(str(e))
 
                 # Si no se pudo procesar la salida, generamos valores lingüísticos aleatorios
                 if not csv_procesado_correctamente:
                     if intento_actual_reevaluacion >= max_intentos_reevaluacion:
-                        print("Generando valores lingüísticos aleatorios para la re-evaluación Mistral...")
+                        print("Generando valores lingüísticos aleatorios para la re-evaluación qwen...")
 
                         # Generar matriz con valores aleatorios
-                        matriz_agente_mistral_nueva = []
+                        matriz_agente_qwen_nueva = []
                         for _ in jugadores:
                             calificaciones = []
                             for _ in criterios:
                                 calificaciones.append(random.choice(valores_linguisticos))
-                            matriz_agente_mistral_nueva.append(calificaciones)
+                            matriz_agente_qwen_nueva.append(calificaciones)
 
-                        print("Se han generado valores lingüísticos aleatorios para el agente Mistral para continuar con el programa.")
+                        print("Se han generado valores lingüísticos aleatorios para el agente qwen para continuar con el programa.")
                     else:
                         # Si no es el último intento, usamos la matriz anterior
-                        matriz_agente_mistral_nueva = matriz_agente_mistral_actual
+                        matriz_agente_qwen_nueva = matriz_agente_qwen_actual
 
             # Re-evaluación con el agente Gemini
             print(f"\n=== Re-evaluación con el Agente Gemini (Ronda {ronda_actual}/{max_rondas_discusion}) ===")
@@ -807,7 +973,7 @@ if __name__ == "__main__":
                     Tu respuesta anterior no tenía el formato CSV correcto. Por favor, intenta de nuevo.
                     Recuerda que debes responder con el siguiente formato exacto:
                     1. La Primera linea es: ```csv
-                    2. El encabezado será con los campos: 'Jugador', y la lista de todos los criterios separados por comas
+                    2. El encabezado será con los campos: Jugador, y la lista de todos los criterios separados por comas
                     3. Una linea extra por cada nombre de jugador y las calificaciones lingüísticas para cada criterio, separadas por comas, sin espacios extra.
                     4. Ultima linea: ```
                     """
@@ -821,26 +987,25 @@ if __name__ == "__main__":
                     print(f"El agente Gemini reportó un error en la re-evaluación. Reintentando...")
                     continue
 
-                # Verificar si la respuesta contiene formato CSV
-                if "```csv" in output_reevaluacion_gemini and "```" in output_reevaluacion_gemini:
-                    # Intentar procesar el CSV para verificar que es válido
-                    try:
-                        csv_data = StringIO(output_reevaluacion_gemini.replace("```csv", "").replace("```", "").strip())
-                        reader = csv.DictReader(csv_data)
-                        # Solo verificamos que se pueda leer al menos una fila
-                        next(reader, None)
-                        # Si llegamos aquí sin excepciones, la respuesta es válida
-                        print("✅ CSV de re-evaluación Gemini procesado correctamente.")
-                        csv_procesado_correctamente = True
-                        break
-                    except Exception as e:
-                        print(f"ERROR: CSV inválido en la re-evaluación Gemini (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion}).")
-                        print(str(e))
-                        if intento_actual_reevaluacion >= max_intentos_reevaluacion:
-                            print(f"Se alcanzó el número máximo de intentos ({max_intentos_reevaluacion}). Generando valores lingüísticos aleatorios...")
-                else:
-                    # Si no hay formato CSV, asumimos que es una respuesta válida
+                # Intentar procesar el CSV para verificar que es válido
+                try:
+                    # Extraer el contenido CSV de la salida del agente
+                    csv_content = extraer_csv(output_reevaluacion_gemini)
+                    csv_data = StringIO(csv_content)
+                    reader = csv.DictReader(csv_data)
+                    # Solo verificamos que se pueda leer al menos una fila
+                    next(reader, None)
+                    # Si llegamos aquí sin excepciones, la respuesta es válida
+                    print("✅ CSV de re-evaluación Gemini procesado correctamente.")
+                    csv_procesado_correctamente = True
                     break
+                except Exception as e:
+                    print(f"ERROR: CSV inválido en la re-evaluación Gemini (intento {intento_actual_reevaluacion}/{max_intentos_reevaluacion}).")
+                    print(str(e))
+                    if intento_actual_reevaluacion >= max_intentos_reevaluacion:
+                        print(f"Se alcanzó el número máximo de intentos ({max_intentos_reevaluacion}). Generando valores lingüísticos aleatorios...")
+                    # Si no es el último intento, continuamos con el siguiente intento
+                    continue
 
             print("\n=== Nueva evaluación del agente Gemini ===")
             print(output_reevaluacion_gemini)
@@ -849,13 +1014,15 @@ if __name__ == "__main__":
             matriz_agente_gemini_nueva = []
             csv_procesado_correctamente = False
             try:
-                csv_data = StringIO(output_reevaluacion_gemini.replace("```CSV", "").replace("```", "").strip())
+                # Extraer el contenido CSV de la salida del agente
+                csv_content = extraer_csv(output_reevaluacion_gemini)
+                csv_data = StringIO(csv_content)
                 reader = csv.DictReader(csv_data)
 
                 for row in reader:
-                    # Normalizar solo las claves del diccionario (convertir a minúsculas, eliminar espacios y quitar tildes)
-                    # Los valores (términos lingüísticos) se mantienen sin normalizar para preservar su formato original
-                    row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v for k, v in row.items()}
+                    # Normalizar las claves (criterios) pero no los valores (términos lingüísticos)
+                    # Sin embargo, eliminamos comillas simples y dobles de los valores
+                    row_normalizado = {normalizar_texto(k.strip()) if k is not None else "": v.replace("'", "").replace('"', "") if v is not None else "" for k, v in row.items()}
                     calificaciones = []
                     for criterio in criterios:
                         criterio_lower = normalizar_texto(criterio)
@@ -916,39 +1083,39 @@ if __name__ == "__main__":
 
             # Calcular nuevas matrices FLPR
             flpr_usuario_nueva = None
-            flpr_agente_mistral_nueva = None
+            flpr_agente_qwen_nueva = None
             flpr_agente_gemini_nueva = None
 
             for idx, criterio in enumerate(criterios):
                 calificaciones_usuario_nuevas = [fila[idx] for fila in matriz_usuario_nueva]
-                calificaciones_agente_mistral_nuevas = [fila[idx] for fila in matriz_agente_mistral_nueva]
+                calificaciones_agente_qwen_nuevas = [fila[idx] for fila in matriz_agente_qwen_nueva]
                 calificaciones_agente_gemini_nuevas = [fila[idx] for fila in matriz_agente_gemini_nueva]
 
                 flpr_usuario_criterio_nueva = generar_flpr(calificaciones_usuario_nuevas)
-                flpr_agente_mistral_criterio_nueva = generar_flpr(calificaciones_agente_mistral_nuevas)
+                flpr_agente_qwen_criterio_nueva = generar_flpr(calificaciones_agente_qwen_nuevas)
                 flpr_agente_gemini_criterio_nueva = generar_flpr(calificaciones_agente_gemini_nuevas)
 
                 if flpr_usuario_nueva is None:
                     flpr_usuario_nueva = flpr_usuario_criterio_nueva
-                    flpr_agente_mistral_nueva = flpr_agente_mistral_criterio_nueva
+                    flpr_agente_qwen_nueva = flpr_agente_qwen_criterio_nueva
                     flpr_agente_gemini_nueva = flpr_agente_gemini_criterio_nueva
                 else:
                     flpr_usuario_nueva = calcular_flpr_comun(flpr_usuario_nueva, flpr_usuario_criterio_nueva)
-                    flpr_agente_mistral_nueva = calcular_flpr_comun(flpr_agente_mistral_nueva, flpr_agente_mistral_criterio_nueva)
+                    flpr_agente_qwen_nueva = calcular_flpr_comun(flpr_agente_qwen_nueva, flpr_agente_qwen_criterio_nueva)
                     flpr_agente_gemini_nueva = calcular_flpr_comun(flpr_agente_gemini_nueva, flpr_agente_gemini_criterio_nueva)
 
             print(f"\n=== Matriz FLPR Final del Usuario (Después de la ronda {ronda_actual} de discusión) ===")
             print(flpr_usuario_nueva)
 
-            print(f"\n=== Matriz FLPR Final del Agente Mistral (Después de la ronda {ronda_actual} de discusión) ===")
-            print(flpr_agente_mistral_nueva)
+            print(f"\n=== Matriz FLPR Final del Agente qwen (Después de la ronda {ronda_actual} de discusión) ===")
+            print(flpr_agente_qwen_nueva)
 
             print(f"\n=== Matriz FLPR Final del Agente Gemini (Después de la ronda {ronda_actual} de discusión) ===")
             print(flpr_agente_gemini_nueva)
 
             # Calcular matriz FLPR colectiva entre los agentes después de la reevaluación
-            flpr_agentes_nueva = calcular_flpr_comun(flpr_agente_mistral_nueva, flpr_agente_gemini_nueva)
-            print(f"\n=== Matriz FLPR Colectiva (Agentes Mistral y Gemini) (Después de la ronda {ronda_actual} de discusión) ===")
+            flpr_agentes_nueva = calcular_flpr_comun(flpr_agente_qwen_nueva, flpr_agente_gemini_nueva)
+            print(f"\n=== Matriz FLPR Colectiva (Agentes qwen y Gemini) (Después de la ronda {ronda_actual} de discusión) ===")
             print(flpr_agentes_nueva)
 
             # Calcular matriz FLPR colectiva después de la reevaluación
@@ -957,21 +1124,21 @@ if __name__ == "__main__":
             print(flpr_colectiva_nueva)
 
             # Calcular matrices de similitud después de la discusión
-            matriz_similitud_mistral_usuario_nueva = calcular_matriz_similitud(flpr_usuario_nueva, flpr_agente_mistral_nueva)
+            matriz_similitud_qwen_usuario_nueva = calcular_matriz_similitud(flpr_usuario_nueva, flpr_agente_qwen_nueva)
             matriz_similitud_gemini_usuario_nueva = calcular_matriz_similitud(flpr_usuario_nueva, flpr_agente_gemini_nueva)
-            matriz_similitud_agentes_nueva = calcular_matriz_similitud(flpr_agente_mistral_nueva, flpr_agente_gemini_nueva)
+            matriz_similitud_agentes_nueva = calcular_matriz_similitud(flpr_agente_qwen_nueva, flpr_agente_gemini_nueva)
 
-            print(f"\n=== Matriz de Similitud (Usuario y Agente Mistral) (Después de la ronda {ronda_actual} de discusión) ===")
-            print(matriz_similitud_mistral_usuario_nueva)
+            print(f"\n=== Matriz de Similitud (Usuario y Agente qwen) (Después de la ronda {ronda_actual} de discusión) ===")
+            print(matriz_similitud_qwen_usuario_nueva)
 
             print(f"\n=== Matriz de Similitud (Usuario y Agente Gemini) (Después de la ronda {ronda_actual} de discusión) ===")
             print(matriz_similitud_gemini_usuario_nueva)
 
-            print(f"\n=== Matriz de Similitud (Agente Mistral y Agente Gemini) (Después de la ronda {ronda_actual} de discusión) ===")
+            print(f"\n=== Matriz de Similitud (Agente qwen y Agente Gemini) (Después de la ronda {ronda_actual} de discusión) ===")
             print(matriz_similitud_agentes_nueva)
 
             # Calcular nivel de consenso después de la discusión
-            matrices_similitud_nuevas = [matriz_similitud_mistral_usuario_nueva, matriz_similitud_gemini_usuario_nueva, matriz_similitud_agentes_nueva]
+            matrices_similitud_nuevas = [matriz_similitud_qwen_usuario_nueva, matriz_similitud_gemini_usuario_nueva, matriz_similitud_agentes_nueva]
             cr_nuevo, consenso_alcanzado_nuevo = calcular_cr(matrices_similitud_nuevas, consenso_minimo)
             print(f"\n=== Nivel de Consenso (Después de la ronda {ronda_actual} de discusión) ===")
             print(f"Nivel de consenso (CR): {cr_nuevo}")
@@ -991,11 +1158,11 @@ if __name__ == "__main__":
 
             # Actualizar las variables para la siguiente ronda
             flpr_usuario_actual = flpr_usuario_nueva
-            flpr_agente_mistral_actual = flpr_agente_mistral_nueva
+            flpr_agente_qwen_actual = flpr_agente_qwen_nueva
             flpr_agente_gemini_actual = flpr_agente_gemini_nueva
             flpr_colectiva_actual = flpr_colectiva_nueva
             matriz_usuario_actual = matriz_usuario_nueva
-            matriz_agente_mistral_actual = matriz_agente_mistral_nueva
+            matriz_agente_qwen_actual = matriz_agente_qwen_nueva
             matriz_agente_gemini_actual = matriz_agente_gemini_nueva
 
             # Incrementar el contador de rondas
@@ -1010,10 +1177,159 @@ if __name__ == "__main__":
                 for posicion, (jugador, puntuacion) in enumerate(ranking, 1):
                     print(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
 
-                # Si se alcanzó el máximo de rondas sin consenso, mostrar un mensaje
+                # Si se alcanzó el máximo de rondas sin consenso, dar una última oportunidad para modificar matrices
                 if not consenso_alcanzado_nuevo and ronda_actual > max_rondas_discusion:
                     print(f"\n⚠️ Se ha alcanzado el número máximo de rondas de discusión ({max_rondas_discusion}) sin llegar al consenso mínimo requerido.")
-                    print(f"Se muestra el ranking con el nivel de consenso actual: {cr_nuevo}")
+                    print(f"Nivel de consenso actual: {cr_nuevo}")
+
+                    # Ofrecer una última oportunidad para modificar matrices
+                    print("\n=== Última oportunidad para corregir sesgos ===")
+                    print("Puedes revisar y modificar las matrices de términos lingüísticos una última vez antes de calcular el ranking final.")
+
+                    # Mostrar todas las matrices
+                    mostrar_matriz_terminos(matriz_usuario_actual, "Usuario (Actual)")
+                    mostrar_matriz_terminos(matriz_agente_qwen_actual, "Agente qwen (Actual)")
+                    mostrar_matriz_terminos(matriz_agente_gemini_actual, "Agente Gemini (Actual)")
+
+                    # Preguntar si el usuario quiere modificar alguna matriz
+                    modificar_matrices_final = input("\n¿Deseas modificar alguna matriz para corregir sesgos? (s/n): ").strip().lower()
+
+                    if modificar_matrices_final == 's':
+                        while True:
+                            print("\nSelecciona la matriz que deseas modificar:")
+                            print("1. Matriz del Usuario")
+                            print("2. Matriz del Agente qwen")
+                            print("3. Matriz del Agente Gemini")
+                            print("4. Terminar modificaciones")
+
+                            opcion = input("Ingresa el número de la opción: ").strip()
+
+                            if opcion == '4':
+                                break
+
+                            if opcion not in ['1', '2', '3']:
+                                print("Opción no válida. Intenta de nuevo.")
+                                continue
+
+                            # Seleccionar la matriz a modificar
+                            if opcion == '1':
+                                matriz_a_modificar = matriz_usuario_actual
+                                nombre_matriz = "Usuario"
+                            elif opcion == '2':
+                                matriz_a_modificar = matriz_agente_qwen_actual
+                                nombre_matriz = "Agente qwen"
+                            elif opcion == '3':
+                                matriz_a_modificar = matriz_agente_gemini_actual
+                                nombre_matriz = "Agente Gemini"
+
+                            # Mostrar la matriz seleccionada
+                            mostrar_matriz_terminos(matriz_a_modificar, nombre_matriz)
+
+                            # Solicitar índices del valor a modificar
+                            while True:
+                                try:
+                                    jugador_idx = int(input(f"\nIngresa el número del jugador a modificar (1-{len(jugadores)}): ")) - 1
+                                    if jugador_idx < 0 or jugador_idx >= len(jugadores):
+                                        print(f"Índice de jugador fuera de rango. Debe estar entre 1 y {len(jugadores)}.")
+                                        continue
+
+                                    criterio_idx = int(input(f"Ingresa el número del criterio a modificar (1-{len(criterios)}): ")) - 1
+                                    if criterio_idx < 0 or criterio_idx >= len(criterios):
+                                        print(f"Índice de criterio fuera de rango. Debe estar entre 1 y {len(criterios)}.")
+                                        continue
+
+                                    print(f"\nValor actual: {matriz_a_modificar[jugador_idx][criterio_idx]}")
+                                    print("Valores posibles: Muy Bajo, Bajo, Medio, Alto, Muy Alto")
+
+                                    nuevo_valor = input("Ingresa el nuevo valor: ").strip()
+                                    if nuevo_valor not in valores_linguisticos:
+                                        print(f"Valor no válido. Debe ser uno de: {', '.join(valores_linguisticos)}")
+                                        continue
+
+                                    # Modificar el valor en la matriz
+                                    matriz_a_modificar[jugador_idx][criterio_idx] = nuevo_valor
+                                    print(f"Valor modificado correctamente.")
+
+                                    # Preguntar si desea modificar otro valor en la misma matriz
+                                    continuar = input("¿Deseas modificar otro valor en esta matriz? (s/n): ").strip().lower()
+                                    if continuar != 's':
+                                        break
+
+                                except ValueError:
+                                    print("Por favor, ingresa un número válido.")
+
+                            # Recalcular la matriz FLPR correspondiente
+                            if opcion == '1':
+                                flpr_usuario_nueva = None
+                                for idx, criterio in enumerate(criterios):
+                                    calificaciones_usuario_nuevas = [fila[idx] for fila in matriz_usuario_actual]
+                                    flpr_usuario_criterio_nueva = generar_flpr(calificaciones_usuario_nuevas)
+                                    if flpr_usuario_nueva is None:
+                                        flpr_usuario_nueva = flpr_usuario_criterio_nueva
+                                    else:
+                                        flpr_usuario_nueva = calcular_flpr_comun(flpr_usuario_nueva, flpr_usuario_criterio_nueva)
+                                print("\n=== Matriz FLPR del Usuario (Actualizada) ===")
+                                print(flpr_usuario_nueva)
+                                flpr_usuario_actual = flpr_usuario_nueva
+                            elif opcion == '2':
+                                flpr_agente_qwen_nueva = None
+                                for idx, criterio in enumerate(criterios):
+                                    calificaciones_agente_qwen_nuevas = [fila[idx] for fila in matriz_agente_qwen_actual]
+                                    flpr_agente_qwen_criterio_nueva = generar_flpr(calificaciones_agente_qwen_nuevas)
+                                    if flpr_agente_qwen_nueva is None:
+                                        flpr_agente_qwen_nueva = flpr_agente_qwen_criterio_nueva
+                                    else:
+                                        flpr_agente_qwen_nueva = calcular_flpr_comun(flpr_agente_qwen_nueva, flpr_agente_qwen_criterio_nueva)
+                                print("\n=== Matriz FLPR del Agente qwen (Actualizada) ===")
+                                print(flpr_agente_qwen_nueva)
+                                flpr_agente_qwen_actual = flpr_agente_qwen_nueva
+                            elif opcion == '3':
+                                flpr_agente_gemini_nueva = None
+                                for idx, criterio in enumerate(criterios):
+                                    calificaciones_agente_gemini_nuevas = [fila[idx] for fila in matriz_agente_gemini_actual]
+                                    flpr_agente_gemini_criterio_nueva = generar_flpr(calificaciones_agente_gemini_nuevas)
+                                    if flpr_agente_gemini_nueva is None:
+                                        flpr_agente_gemini_nueva = flpr_agente_gemini_criterio_nueva
+                                    else:
+                                        flpr_agente_gemini_nueva = calcular_flpr_comun(flpr_agente_gemini_nueva, flpr_agente_gemini_criterio_nueva)
+                                print("\n=== Matriz FLPR del Agente Gemini (Actualizada) ===")
+                                print(flpr_agente_gemini_nueva)
+                                flpr_agente_gemini_actual = flpr_agente_gemini_nueva
+
+                        # Recalcular matrices FLPR colectivas
+                        flpr_agentes_nueva = calcular_flpr_comun(flpr_agente_qwen_actual, flpr_agente_gemini_actual)
+                        print("\n=== Matriz FLPR Colectiva (Agentes qwen y Gemini) (Actualizada) ===")
+                        print(flpr_agentes_nueva)
+
+                        flpr_colectiva_nueva = calcular_flpr_comun(flpr_agentes_nueva, flpr_usuario_actual)
+                        print("\n=== Matriz FLPR Colectiva (Usuario y Agentes) (Actualizada) ===")
+                        print(flpr_colectiva_nueva)
+
+                        # Recalcular matrices de similitud
+                        matriz_similitud_qwen_usuario_nueva = calcular_matriz_similitud(flpr_usuario_actual, flpr_agente_qwen_actual)
+                        matriz_similitud_gemini_usuario_nueva = calcular_matriz_similitud(flpr_usuario_actual, flpr_agente_gemini_actual)
+                        matriz_similitud_agentes_nueva = calcular_matriz_similitud(flpr_agente_qwen_actual, flpr_agente_gemini_actual)
+
+                        # Recalcular nivel de consenso
+                        matrices_similitud_nuevas = [matriz_similitud_qwen_usuario_nueva, matriz_similitud_gemini_usuario_nueva, matriz_similitud_agentes_nueva]
+                        cr_nuevo, consenso_alcanzado_nuevo = calcular_cr(matrices_similitud_nuevas, consenso_minimo)
+                        print(f"\n=== Nivel de Consenso (Después de modificaciones finales) ===")
+                        print(f"Nivel de consenso (CR): {cr_nuevo}")
+                        print(f"Consenso mínimo requerido: {consenso_minimo}")
+                        if consenso_alcanzado_nuevo:
+                            print("✅ Se ha alcanzado el nivel mínimo de consenso.")
+                        else:
+                            print("❌ No se ha alcanzado el nivel mínimo de consenso.")
+
+                        # Recalcular el ranking con las matrices actualizadas
+                        print("\n=== Ranking de Jugadores (Actualizado) ===")
+                        ranking = calcular_ranking_jugadores(flpr_colectiva_nueva, jugadores)
+
+                        print("TOP JUGADORES (de mejor a peor):")
+                        for posicion, (jugador, puntuacion) in enumerate(ranking, 1):
+                            print(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
+
+                    print(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_nuevo}")
 
             # Si no se alcanzó el consenso y no se llegó al máximo de rondas, continuar con la siguiente ronda
     else:

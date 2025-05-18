@@ -22,75 +22,75 @@ def calcular_ponderacion_estadisticas(jugador_data):
 
     pesos = {
         "GK": {  # Portero
-            "Total - Cmp%": 0.94,   # Precisión de pases
-            "Long - Cmp%": 0.94,    # Precisión de pases largos
-            "Saves": 1.56,          # Paradas
-            "Save%": 1.56,          # Porcentaje de paradas
+            "Total - Cmp%": 0.9,   # Precisión de pases
+            "Long - Cmp%": 0.9,    # Precisión de pases largos
+            "Saves": 1.5,          # Paradas
+            "Save%": 1.5,          # Porcentaje de paradas
             "CS": 1.25,             # Porterías a cero
         },
         "Defender": {  # Defensa
-            "Tkl+Int": 1.25,        # Entradas + Intercepciones
-            "Clr": 0.94,            # Despejes
-            "Total - Cmp%": 0.94,   # Precisión de pases
-            "Err": -0.94,           # Errores (negativo)
-            "Blocks": 0.94,         # Bloqueos
-            "Won%": 0.63,           # Porcentaje de duelos aéreos ganados
-            "PrgP": 0.63,           # Pases progresivos
+            "Tkl+Int": 1.1,        # Entradas + Intercepciones
+            "Clr": 0.8,            # Despejes
+            "Total - Cmp%": 0.8,   # Precisión de pases
+            "Err": -0.9,           # Errores (negativo)
+            "Blocks": 0.8,         # Bloqueos
+            "Won%": 0.6,           # Porcentaje de duelos aéreos ganados
+            "PrgP": 0.6,           # Pases progresivos
         },
         "Defensive-Midfielders": {  # Mediocentro defensivo
-            "Tkl+Int": 1.25,        # Entradas + Intercepciones
-            "Total - Cmp%": 1.25,   # Precisión de pases
-            "PrgP": 0.94,           # Pases progresivos
-            "Recov": 0.94,          # Recuperaciones
-            "PrgC": 0.63,           # Conducciones progresivas
-            "KP": 0.63,             # Pases clave
-            "Err": -0.63,           # Errores (negativo)
+            "Tkl+Int": 1.2,        # Entradas + Intercepciones
+            "Total - Cmp%": 1.2,   # Precisión de pases
+            "PrgP": 0.9,           # Pases progresivos
+            "Recov": 0.9,          # Recuperaciones
+            "PrgC": 0.6,           # Conducciones progresivas
+            "KP": 0.6,             # Pases clave
+            "Err": -0.6,           # Errores (negativo)
         },
         "Central Midfielders": {  # Mediocentro
-            "Total - Cmp%": 1.25,   # Precisión de pases
-            "PrgP": 0.94,           # Pases progresivos
-            "KP": 0.94,             # Pases clave
-            "PrgC": 0.94,           # Conducciones progresivas
-            "Tkl+Int": 0.63,        # Entradas + Intercepciones
-            "Ast": 0.94,            # Asistencias
-            "Gls": 0.63,            # Goles
+            "Total - Cmp%": 1.2,   # Precisión de pases
+            "PrgP": 0.9,           # Pases progresivos
+            "KP": 0.9,             # Pases clave
+            "PrgC": 0.9,           # Conducciones progresivas
+            "Tkl+Int": 0.6,        # Entradas + Intercepciones
+            "Ast": 0.9,            # Asistencias
+            "Gls": 0.6,            # Goles
         },
         "Attacking Midfielders": {  # Mediapunta
-            "KP": 1.25,             # Pases clave
-            "Ast": 0.94,            # Asistencias
-            "Gls": 0.94,            # Goles
-            "SCA": 0.94,            # Acciones que crean ocasiones de disparo
-            "PrgC": 0.94,           # Conducciones progresivas
-            "Succ%": 0.63,          # Porcentaje de regates exitosos
-            "Total - Cmp%": 0.63,   # Precisión de pases
+            "KP": 1.2,             # Pases clave
+            "Ast": 0.9,            # Asistencias
+            "Gls": 0.9,            # Goles
+            "SCA": 0.9,            # Acciones que crean ocasiones de disparo
+            "PrgC": 0.9,           # Conducciones progresivas
+            "Succ%": 0.6,          # Porcentaje de regates exitosos
+            "Total - Cmp%": 0.6,   # Precisión de pases
         },
         "Wing-Back": {  # Carrilero
-            "Crs_x": 1.25,          # Centros
-            "PrgC": 0.94,           # Conducciones progresivas
-            "Tkl+Int": 0.94,        # Entradas + Intercepciones
-            "KP": 0.94,             # Pases clave
-            "Ast": 0.94,            # Asistencias
-            "Total - Cmp%": 0.63,   # Precisión de pases
-            "Gls": 0.63,            # Goles
+            "Crs_x": 1.2,          # Centros
+            "PrgC": 0.9,           # Conducciones progresivas
+            "Tkl+Int": 0.9,        # Entradas + Intercepciones
+            "KP": 0.9,             # Pases clave
+            "Ast": 0.9,            # Asistencias
+            "Total - Cmp%": 0.6,   # Precisión de pases
+            "Gls": 0.6,            # Goles
         },
         "Forwards": {  # Delantero
-            "Gls": 1.56,            # Goles
-            "Sh": 0.94,             # Tiros
-            "SoT%": 0.94,           # Porcentaje de tiros a puerta
-            "Ast": 0.63,            # Asistencias
-            "KP": 0.63,             # Pases clave
-            "Succ%": 0.63,          # Porcentaje de regates exitosos
-            "PrgR": 0.94,           # Pases progresivos recibidos
+            "Gls": 1.5,            # Goles
+            "Sh": 0.9,             # Tiros
+            "SoT%": 0.9,           # Porcentaje de tiros a puerta
+            "Ast": 0.6,            # Asistencias
+            "KP": 0.6,             # Pases clave
+            "Succ%": 0.6,          # Porcentaje de regates exitosos
+            "PrgR": 0.9,           # Pases progresivos recibidos
         },
         "Unknown": {  # Posición desconocida - pesos genéricos
-            "Gls": 0.94,            # Goles
-            "Ast": 0.94,            # Asistencias
-            "Total - Cmp%": 0.94,   # Precisión de pases
-            "Tkl+Int": 0.94,        # Entradas + Intercepciones
-            "PrgP": 0.63,           # Pases progresivos
-            "PrgC": 0.63,           # Conducciones progresivas
-            "KP": 0.63,             # Pases clave
-            "SCA": 0.63,            # Acciones que crean ocasiones de disparo
+            "Gls": 0.9,            # Goles
+            "Ast": 0.9,            # Asistencias
+            "Total - Cmp%": 0.9,   # Precisión de pases
+            "Tkl+Int": 0.9,        # Entradas + Intercepciones
+            "PrgP": 0.6,           # Pases progresivos
+            "PrgC": 0.6,           # Conducciones progresivas
+            "KP": 0.6,             # Pases clave
+            "SCA": 0.6,            # Acciones que crean ocasiones de disparo
         }
     }
 

@@ -87,7 +87,6 @@ def explicar_estadisticas(query: list) -> list:
 
 MODEL_NAME = "llama-3.3-70b-versatile"
 TEMPERATURE = 0.2
-TOP_P = 0.1
 LISTA_TOOLS = [analizador_jugadores]
 
 
@@ -95,8 +94,7 @@ def configurar_llm() -> ChatGroq:
     """Configura y devuelve el modelo en modo chat."""
     return ChatGroq(
         model=MODEL_NAME,
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
+        temperature=TEMPERATURE
     )
 
 

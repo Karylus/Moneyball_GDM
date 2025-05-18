@@ -83,9 +83,9 @@ def explicar_estadisticas(query: list) -> list:
     return explicaciones
 
 
-MODEL_NAME = "mistral-nemo:12b"
-TEMPERATURE = 0.2
-TOP_P = 0.1
+MODEL_NAME = "qwen3:8b"
+TEMPERATURE = 0.7
+TOP_P = 0.95
 LISTA_TOOLS = [analizador_jugadores]
 
 
@@ -95,7 +95,7 @@ def configurar_llm() -> ChatOllama:
         model=MODEL_NAME,
         temperature=TEMPERATURE,
         top_p=TOP_P,
-        num_ctx=40000
+        num_ctx=38000
     )
 
 
@@ -113,6 +113,7 @@ def configurar_agente():
         memory=memoria,
         max_iterations=10,
         verbose=True,
+        handle_parsing_errors=True,
         agent_kwargs={
             "memory_prompts": [chat_history],
             "input_variables": ["input", "agent_scratchpad", "chat_history"]
