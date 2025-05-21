@@ -4,11 +4,13 @@ from langchain_core.tools import tool
 from src.agentes.herramientas_analisis import *
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder
-import getpass
+from dotenv import load_dotenv
 import os
 
+load_dotenv()
+
 if "GOOGLE_API_KEY" not in os.environ:
-    os.environ["GOOGLE_API_KEY"] = "AIzaSyBAMgkUqsL55d-K9HWHmls6Ec2RlJp2bJU"
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
 
 @tool
 def analizador_jugador(jugador: str):

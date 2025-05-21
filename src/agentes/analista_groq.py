@@ -4,9 +4,13 @@ from langchain_core.tools import tool
 from src.agentes.herramientas_analisis import *
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 if "GROQ_API_KEY" not in os.environ:
-    os.environ["GROQ_API_KEY"] = "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"
+    os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY", "")
 
 @tool
 def analizador_jugador(jugador: str):
