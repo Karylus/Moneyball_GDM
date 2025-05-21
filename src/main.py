@@ -74,16 +74,16 @@ def extraer_csv(texto):
 
         return '\n'.join(lines[csv_start:]).strip()
 
-from agentes.analista_qwen import configurar_agente as configurar_agente_qwen
-from agentes.analista_gemini import configurar_agente as configurar_agente_gemini
-from agentes.analista_groq import configurar_agente as configurar_agente_groq
-from utils.logger import logger
-from utils.matrices import generar_flpr, calcular_flpr_comun
-from utils.consenso import calcular_matriz_similitud, calcular_cr
-from utils.ranking import calcular_ranking_jugadores
+from src.agentes.analista_qwen import configurar_agente as configurar_agente_qwen
+from src.agentes.analista_gemini import configurar_agente as configurar_agente_gemini
+from src.agentes.analista_groq import configurar_agente as configurar_agente_groq
+from src.utils.logger import logger
+from src.core.fuzzy_matrices import generar_flpr, calcular_flpr_comun
+from src.core.consensus_logic import calcular_matriz_similitud, calcular_cr
+from src.core.ranking_logic import calcular_ranking_jugadores
 from langchain_core.prompts import ChatPromptTemplate
 
-with open('src/data/fbref_stats_explained.json', 'r', encoding='utf-8') as f:
+with open('data/fbref_stats_explained.json', 'r', encoding='utf-8') as f:
     explicaciones_stats = json.load(f)
 
 explicaciones_formateadas = "\n".join([f"{clave}: {valor}" for clave, valor in explicaciones_stats.items() if not clave.startswith("_")])

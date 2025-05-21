@@ -1,7 +1,8 @@
 from langchain.agents import initialize_agent, AgentType
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
-from src.agentes.herramientas_analisis import *
+from src.core.analysis_tools import *
+from src.data_management.data_loader import cargar_explicacion_estadisticas
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder
 from dotenv import load_dotenv
