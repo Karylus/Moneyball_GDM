@@ -38,13 +38,13 @@ def calcular_ponderacion_estadisticas(jugador_data):
             "PrgP": 0.6,           # Pases progresivos
         },
         "Defensive-Midfielders": {  # Mediocentro defensivo
-            "Tkl+Int": 1.2,        # Entradas + Intercepciones
-            "Total - Cmp%": 1.2,   # Precisión de pases
-            "PrgP": 0.9,           # Pases progresivos
-            "Recov": 0.9,          # Recuperaciones
-            "PrgC": 0.6,           # Conducciones progresivas
-            "KP": 0.6,             # Pases clave
-            "Err": -0.6,           # Errores (negativo)
+            "Tkl+Int": 1.1,        # Entradas + Intercepciones
+            "Total - Cmp%": 1.1,   # Precisión de pases
+            "PrgP": 0.8,           # Pases progresivos
+            "Recov": 0.8,          # Recuperaciones
+            "PrgC": 0.5,           # Conducciones progresivas
+            "KP": 0.5,             # Pases clave
+            "Err": -0.7,           # Errores (negativo)
         },
         "Central Midfielders": {  # Mediocentro
             "Total - Cmp%": 1.2,   # Precisión de pases
@@ -56,31 +56,31 @@ def calcular_ponderacion_estadisticas(jugador_data):
             "Gls": 0.6,            # Goles
         },
         "Attacking Midfielders": {  # Mediapunta
-            "KP": 1.2,             # Pases clave
+            "KP": 1.1,             # Pases clave
             "Ast": 0.9,            # Asistencias
             "Gls": 0.9,            # Goles
-            "SCA": 0.9,            # Acciones que crean ocasiones de disparo
-            "PrgC": 0.9,           # Conducciones progresivas
-            "Succ%": 0.6,          # Porcentaje de regates exitosos
-            "Total - Cmp%": 0.6,   # Precisión de pases
+            "SCA": 0.6,            # Acciones que crean ocasiones de disparo
+            "PrgC": 0.6,           # Conducciones progresivas
+            "Succ%": 0.5,          # Porcentaje de regates exitosos
+            "Total - Cmp%": 0.5,   # Precisión de pases
         },
         "Wing-Back": {  # Carrilero
-            "Crs_x": 1.2,          # Centros
-            "PrgC": 0.9,           # Conducciones progresivas
-            "Tkl+Int": 0.9,        # Entradas + Intercepciones
-            "KP": 0.9,             # Pases clave
-            "Ast": 0.9,            # Asistencias
+            "Crs_x": 1.1,          # Centros
+            "PrgC": 0.6,           # Conducciones progresivas
+            "Tkl+Int": 0.8,        # Entradas + Intercepciones
+            "KP": 0.5,             # Pases clave
+            "Ast": 1.2,            # Asistencias
             "Total - Cmp%": 0.6,   # Precisión de pases
-            "Gls": 0.6,            # Goles
+            "Gls": 0.8,            # Goles
         },
         "Forwards": {  # Delantero
             "Gls": 1.5,            # Goles
-            "Sh": 0.9,             # Tiros
-            "SoT%": 0.9,           # Porcentaje de tiros a puerta
-            "Ast": 0.6,            # Asistencias
-            "KP": 0.6,             # Pases clave
-            "Succ%": 0.6,          # Porcentaje de regates exitosos
-            "PrgR": 0.9,           # Pases progresivos recibidos
+            "Sh": 0.8,             # Tiros
+            "SoT%": 0.8,           # Porcentaje de tiros a puerta
+            "Ast": 0.5,            # Asistencias
+            "KP": 0.5,             # Pases clave
+            "Succ%": 0.5,          # Porcentaje de regates exitosos
+            "PrgR": 0.8,           # Pases progresivos recibidos
         },
         "Unknown": {  # Posición desconocida - pesos genéricos
             "Gls": 0.9,            # Goles
