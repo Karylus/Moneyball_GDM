@@ -8,6 +8,7 @@
   "Born": "Año de nacimiento",
   "90s": "Minutos jugados por 90 minutos",
   "Comp": "Competición en la que juega el jugador",
+  "Season": "Temporada a la que pertenecen los datos",
 
   "_comment": "Los siguientes stats son de POSSESION",
   "Touches": "Cantidad total de toques de balón",

@@ -60,3 +60,31 @@ def calcular_flpr_comun(flpr_agente, flpr_usuario):
     - np.ndarray: FLPR común.
     """
     return np.round((flpr_agente + flpr_usuario) / 2, 3)
+
+def calcular_matrices_flpr(matrices, criterios):
+    """
+    Calcula las matrices FLPR para cada matriz de calificaciones.
+
+    Args:
+        matrices (dict): Diccionario con las matrices de calificaciones
+        criterios (list): Lista de criterios
+
+    Returns:
+        dict: Diccionario con las matrices FLPR calculadas
+    """
+    flpr_matrices = {}
+
+    for nombre, matriz in matrices.items():
+        flpr_matriz = None
+        for idx, criterio in enumerate(criterios):
+            calificaciones = [fila[idx] for fila in matriz]
+            flpr_criterio = generar_flpr(calificaciones)
+
+            if flpr_matriz is None:
+                flpr_matriz = flpr_criterio
+            else:
+                flpr_matriz = calcular_flpr_comun(flpr_matriz, flpr_criterio)
+
+        flpr_matrices[nombre] = flpr_matriz
+
+    return flpr_matrices

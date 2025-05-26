@@ -150,7 +150,7 @@ def run_migration():
 
     # Asegúrate que los nombres de archivo coincidan con los que tienes en data
     csv_files_to_migrate = [
-        os.path.join(DATA_FOLDER, "fbref_full_stats.csv"),
+        os.path.join(DATA_FOLDER, "fbref_full_stats_2425.csv"),
         os.path.join(DATA_FOLDER, "fbref_full_stats_2324.csv"),
         os.path.join(DATA_FOLDER, "fbref_full_stats_2223.csv"),
     ]
@@ -181,11 +181,6 @@ if __name__ == "__main__":
     # Este bloque se ejecuta solo cuando el script es llamado directamente
     print(
         "Iniciando migración de datos desde CSV a MongoDB (ejecución directa de db_migration.py)...")
-
-    # La lógica de importación al inicio del script ya debería haber
-    # configurado sys.path para que 'from src.database...' funcione.
-    # No es necesario modificar sys.path aquí de nuevo si la estructura de importación
-    # al inicio del archivo es robusta.
 
     success = run_migration()
 

@@ -7,6 +7,9 @@ UMBRAL_SIMILITUD = 85
 def obtener_info_jugador(jugador: str) -> str:
     df = cargar_estadisticas_jugadores()
 
+    if isinstance(df, str):
+        return f"Error al cargar los datos: {df}"
+
     jugador_normalizado = normalizar_nombre(jugador.strip())
 
     if 'normalized_name' not in df.columns:
@@ -30,6 +33,9 @@ def obtener_info_jugadores(jugadores: list) -> str:
     :return: Un JSON con la información de todos los jugadores solicitados.
     """
     df = cargar_estadisticas_jugadores()
+
+    if isinstance(df, str):
+        return f"Error al cargar los datos: {df}"
 
     if 'normalized_name' not in df.columns:
         df['normalized_name'] = df['Player'].apply(normalizar_nombre)
