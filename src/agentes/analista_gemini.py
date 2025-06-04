@@ -1,8 +1,7 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from src.agentes.base_agent import BaseAgent, analizador_jugador, analizador_jugadores
+from src.agentes.agente_base import BaseAgent, analizador_jugadores, explicar_estadisticas
 from dotenv import load_dotenv
 import os
-
 
 load_dotenv()
 
@@ -13,7 +12,7 @@ if "GOOGLE_API_KEY" not in os.environ:
 
 class AgenteGemini(BaseAgent):
     """
-    Implementación del agente de análisis usando el modelo Gemini.
+    Implementación del agente con modelo Gemini.
     """
 
     def __init__(self):
@@ -23,7 +22,7 @@ class AgenteGemini(BaseAgent):
         model_name = "gemini-2.0-flash"
         temperature = 0.2
         top_p = 0.1
-        tools = [analizador_jugador, analizador_jugadores]
+        tools = [analizador_jugadores, explicar_estadisticas]
 
         super().__init__(
             model_name=model_name,
@@ -46,8 +45,5 @@ class AgenteGemini(BaseAgent):
 
 
 def configurar_agente():
-    """
-    Función de fábrica para mantener compatibilidad con el código existente.
-    """
     agente = AgenteGemini()
     return agente.configurar_agente()

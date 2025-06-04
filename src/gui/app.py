@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
+from fpdf import FPDF
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -20,18 +21,19 @@ from src.agentes.analista_qwen import configurar_agente as configurar_agente_qwe
 from src.agentes.analista_gemini import configurar_agente as configurar_agente_gemini
 from src.agentes.analista_groq import configurar_agente as configurar_agente_groq
 from src.data_management.data_loader import cargar_estadisticas_jugadores
-from src.core.ranking_logic import calcular_ranking_jugadores, calcular_ponderacion_estadisticas
+from src.core.logica_ranking import calcular_ranking_jugadores, calcular_ponderacion_estadisticas, normalizar_puntuacion_individual
 from src.core.fuzzy_matrices import generar_flpr, calcular_flpr_comun, calcular_matrices_flpr
-from src.core.consensus_logic import calcular_matriz_similitud, calcular_cr
+from src.core.logica_consenso import calcular_matriz_similitud, calcular_cr
 from langchain_core.prompts import ChatPromptTemplate
 
 
-class FootballAnalysisApp(tk.Tk):
+class MoneyballApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
         self.title("Moneyball")
         self.geometry("1600x1080")
+        self.iconbitmap("icono.ico")
 
         self.colors = {
             "bg_dark_main": "#262626",
@@ -83,12 +85,12 @@ class FootballAnalysisApp(tk.Tk):
 
         self.style.configure("TLabelFrame",
                              background=self.colors["bg_dark_widget"],
-                             foreground=self.colors["fg_light"], # Color del texto del borde
+                             foreground=self.colors["fg_light"],
                              font=("Arial", 11, "bold"),
                              borderwidth=1,
-                             relief=tk.SOLID) # Relieve cambiado para mejor definición
+                             relief=tk.SOLID)
         self.style.configure("TLabelFrame.Label",
-                             background=self.colors["bg_dark_widget"], # Fondo de la parte de la etiqueta
+                             background=self.colors["bg_dark_widget"],
                              foreground=self.colors["fg_light"],
                              font=("Arial", 11, "bold"))
 
@@ -97,8 +99,8 @@ class FootballAnalysisApp(tk.Tk):
                              font=("Arial", 10, "bold"),
                              background=self.colors["accent_color"],
                              foreground=self.colors["fg_white"],
-                             borderwidth=1, # Mantener un borde delgado para definición
-                             relief=tk.FLAT, # Aspecto plano moderno
+                             borderwidth=1,
+                             relief=tk.FLAT,
                              padding=[10, 5])
         self.style.map("TButton",
                        background=[("active", self.colors["accent_secondary"]),
@@ -110,10 +112,10 @@ class FootballAnalysisApp(tk.Tk):
         self.style.configure("TEntry",
                              fieldbackground=self.colors["bg_dark_entry"],
                              foreground=self.colors["fg_light"],
-                             insertcolor=self.colors["fg_light"], # Color del cursor
-                             borderwidth=1, # Borde sutil
+                             insertcolor=self.colors["fg_light"],
+                             borderwidth=1,
                              relief=tk.FLAT,
-                             padding=6) # Padding aumentado
+                             padding=6)
         self.style.map("TEntry",
                        bordercolor=[("focus", self.colors["accent_color"])],
                        relief=[("focus", tk.SOLID)])
@@ -121,14 +123,14 @@ class FootballAnalysisApp(tk.Tk):
 
         self.style.configure("TCombobox",
                              fieldbackground=self.colors["bg_dark_entry"],
-                             background=self.colors["bg_dark_entry"], # Fondo de la flecha
+                             background=self.colors["bg_dark_entry"],
                              foreground=self.colors["fg_light"],
                              arrowcolor=self.colors["fg_light"],
-                             selectbackground=self.colors["accent_secondary"], # Fondo de selección del desplegable
-                             selectforeground=self.colors["fg_white"], # Texto de selección del desplegable
+                             selectbackground=self.colors["accent_secondary"],
+                             selectforeground=self.colors["fg_white"],
                              borderwidth=1,
                              relief=tk.FLAT,
-                             padding=6) # Padding aumentado
+                             padding=6)
         self.style.map("TCombobox",
                        bordercolor=[("focus", self.colors["accent_color"])],
                        relief=[("focus", tk.SOLID)],
@@ -136,13 +138,12 @@ class FootballAnalysisApp(tk.Tk):
                        fieldbackground=[('readonly', self.colors["bg_dark_entry"])],
                        foreground=[('readonly', self.colors["fg_light"])])
 
-        # Para la lista desplegable de TCombobox
         self.option_add('*TCombobox*Listbox.background', self.colors["bg_dark_entry"])
         self.option_add('*TCombobox*Listbox.foreground', self.colors["fg_light"])
         self.option_add('*TCombobox*Listbox.selectBackground', self.colors["accent_secondary"])
         self.option_add('*TCombobox*Listbox.selectForeground', self.colors["fg_white"])
         self.option_add('*TCombobox*Listbox.font', ("Arial", 10))
-        self.option_add('*TCombobox*Listbox.bd', 0) # Sin borde para el listbox mismo
+        self.option_add('*TCombobox*Listbox.bd', 0)
         self.option_add('*TCombobox*Listbox.highlightthickness', 0)
 
 
@@ -155,36 +156,29 @@ class FootballAnalysisApp(tk.Tk):
         self.style.map("TScrollbar",
                        background=[("active", self.colors["accent_color"])])
 
-        # Crear el notebook (contenedor de pestañas)
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Crear las pestañas, pasando los colores
-        self.evaluation_tab = EvaluationTab(self.notebook, self.colors)
-        self.database_tab = DatabaseTab(self.notebook, self.colors)
+        self.evaluacion_tab = EvaluacionTab(self.notebook, self.colors)
+        self.database_tab = PestañaBaseDeDatos(self.notebook, self.colors)
 
-        # Añadir las pestañas al notebook
-        self.notebook.add(self.evaluation_tab, text="Evaluar Jugadores")
+        self.notebook.add(self.evaluacion_tab, text="Evaluar Jugadores")
         self.notebook.add(self.database_tab, text="Consultar Estadísticas")
 
-        # Inicializar los agentes en un hilo separado para no bloquear la interfaz
-        self.initialize_agents_thread = threading.Thread(target=self.initialize_agents)
+        self.initialize_agents_thread = threading.Thread(target=self.iniciar_agentes)
         self.initialize_agents_thread.daemon = True
         self.initialize_agents_thread.start()
 
-        # Mostrar mensaje de inicialización
-        self.status_label = ttk.Label(self, text="Inicializando agentes... Por favor espere.", anchor="center")
-        # Usar el fondo principal para la etiqueta de estado para que se mezcle con la parte inferior de la ventana
+        self.status_label = ttk.Label(self, text="Iniciando agentes... Por favor espere.", anchor="center")
+
         self.status_label.configure(background=self.colors["bg_dark_main"],
                                     foreground=self.colors["fg_light"],
                                     font=("Arial", 9))
         self.status_label.pack(pady=5, fill=tk.X)
 
-
-        # Verificar periódicamente si los agentes están listos
         self.after(1000, self.check_agents_ready)
 
-    def initialize_agents(self):
+    def iniciar_agentes(self):
         """Inicializa los agentes en un hilo separado"""
         try:
             self.agente_qwen = configurar_agente_qwen()
@@ -192,29 +186,27 @@ class FootballAnalysisApp(tk.Tk):
             self.agente_groq = configurar_agente_groq()
             self.agents_ready = True
 
-            # Pasar los agentes a la pestaña de evaluación
-            self.evaluation_tab.set_agents(self.agente_qwen, self.agente_gemini, self.agente_groq)
+            self.evaluacion_tab.set_agents(self.agente_qwen, self.agente_gemini, self.agente_groq)
         except Exception as e:
             self.agents_ready = False
             self.agent_error = str(e)
-            print(f"Error initializing agents: {e}") # Imprimir error para depuración
+            print(f"Error initializing agents: {e}")
 
     def check_agents_ready(self):
         """Verifica si los agentes están listos y actualiza la interfaz"""
         if hasattr(self, 'agents_ready'):
             if self.agents_ready:
-                self.status_label.config(text="Agentes inicializados correctamente.", foreground=self.colors["green_accent"])
-                self.after(3000, lambda: self.status_label.pack_forget()) # Hacer que desaparezca después de un tiempo
+                self.status_label.config(text="Agentes iniciados correctamente.", foreground=self.colors["green_accent"])
+                self.after(3000, lambda: self.status_label.pack_forget())
             else:
-                self.status_label.config(text=f"Error al inicializar agentes: {self.agent_error}", foreground=self.colors["red_accent"])
+                self.status_label.config(text=f"Error al iniciar agentes: {self.agent_error}", foreground=self.colors["red_accent"])
         else:
-            # Verificar de nuevo en 1 segundo
             self.after(1000, self.check_agents_ready)
 
 
-class EvaluationTab(ttk.Frame):
+class EvaluacionTab(ttk.Frame):
     """
-    Pestaña para la evaluación de jugadores con agentes.
+    Pestaña para la evaluación de los jugadores.
     Permite al usuario seleccionar hasta 3 jugadores y criterios para que los agentes los evalúen.
     """
     def __init__(self, parent, colors):
@@ -237,10 +229,10 @@ class EvaluationTab(ttk.Frame):
 
         self.load_player_data()
 
-        self.create_widgets()
+        self.crear_widgets()
 
     def load_player_data(self):
-        """Carga los datos de jugadores desde la base de datos"""
+        """Carga los datos de los jugadores desde la base de datos"""
         try:
             season = self.selected_season.get()
             self.df_players = cargar_estadisticas_jugadores(season)
@@ -251,44 +243,35 @@ class EvaluationTab(ttk.Frame):
             messagebox.showerror("Error", f"Error al cargar datos de jugadores: {str(e)}")
             self.df_players = None
 
-    def create_widgets(self):
+    def crear_widgets(self):
         """Crea los widgets para la pestaña de evaluación"""
-        # Frame principal con dos columnas
         main_frame = ttk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Frame izquierdo para selección de jugadores y criterios
         left_frame = ttk.Frame(main_frame)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-        # Frame derecho para resultados
         right_frame = ttk.Frame(main_frame)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
-        # --- FRAME IZQUIERDO ---
-
-        # Frame para búsqueda de jugadores
         search_frame = ttk.LabelFrame(left_frame, text="Buscar Jugadores")
-        search_frame.pack(fill=tk.X, pady=5, ipady=5) # Añadido ipady para padding interno
+        search_frame.pack(fill=tk.X, pady=5, ipady=5)
 
-        # Frame para selección de temporada
         season_frame = ttk.Frame(search_frame)
-        season_frame.pack(fill=tk.X, padx=10, pady=(5,10)) # Padding aumentado
+        season_frame.pack(fill=tk.X, padx=10, pady=(5,10))
 
         ttk.Label(season_frame, text="Temporada:").pack(side=tk.LEFT, padx=(0,5))
         self.season_combo = ttk.Combobox(season_frame, textvariable=self.selected_season,
-                                        values=self.seasons, state="readonly", width=8) # Ancho aumentado
+                                        values=self.seasons, state="readonly", width=8)
         self.season_combo.pack(side=tk.LEFT, padx=5)
         self.season_combo.bind("<<ComboboxSelected>>", self.on_season_selected)
 
-        # Entrada para buscar jugador
         self.search_var = StringVar()
         self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         self.search_entry.pack(fill=tk.X, padx=10, pady=(0,10)) # Padding aumentado
         self.search_entry.bind("<KeyRelease>", self.on_search_key_release)
 
-        # Listbox para mostrar jugadores encontrados
-        players_frame_inner = ttk.Frame(search_frame) # Renombrado para evitar conflicto
+        players_frame_inner = ttk.Frame(search_frame)
         players_frame_inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0,5))
 
         self.players_listbox = tk.Listbox(players_frame_inner, height=8,
@@ -303,15 +286,12 @@ class EvaluationTab(ttk.Frame):
         players_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.players_listbox.config(yscrollcommand=players_scrollbar.set)
 
-        # Botón para añadir jugador seleccionado
         add_player_button = ttk.Button(search_frame, text="Añadir Jugador", command=self.add_selected_player)
         add_player_button.pack(fill=tk.X, padx=10, pady=(5,10))
 
-        # Frame para jugadores seleccionados
         selected_players_frame = ttk.LabelFrame(left_frame, text="Jugadores Seleccionados")
         selected_players_frame.pack(fill=tk.X, pady=5, ipady=5)
 
-        # Listbox para mostrar jugadores seleccionados
         self.selected_players_listbox = tk.Listbox(selected_players_frame, height=3,
                                                    bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
                                                    selectbackground=self.colors["accent_color"],
@@ -320,15 +300,12 @@ class EvaluationTab(ttk.Frame):
                                                    font=("Arial", 10))
         self.selected_players_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Botón para eliminar jugador seleccionado
         remove_player_button = ttk.Button(selected_players_frame, text="Eliminar Jugador", command=self.remove_selected_player)
         remove_player_button.pack(fill=tk.X, padx=10, pady=(0,10))
 
-        # Frame para criterios de evaluación
         criteria_frame = ttk.LabelFrame(left_frame, text="Criterios de Evaluación")
         criteria_frame.pack(fill=tk.X, pady=5, ipady=5)
 
-        # Definir criterios predefinidos por posición
         self.predefined_criteria = {
                 "General": ["Técnica", "Físico", "Visión de juego", "Posicionamiento", "Toma de decisiones", "Liderazgo", "Disciplina táctica", "Versatilidad"],
                 "Porteros": ["Paradas", "Juego aéreo", "Juego con los pies", "Reflejos", "Posicionamiento", "Comunicación", "Salidas", "Distribución", "Penaltis"],
@@ -340,7 +317,6 @@ class EvaluationTab(ttk.Frame):
                 "Delanteros": ["Definición", "Movimiento", "Juego aéreo", "Técnica", "Posicionamiento", "Desmarque", "Finalización", "Regate", "Asociación", "Presión alta"]
             }
 
-        # Frame para selección de posición
         position_frame = ttk.Frame(criteria_frame)
         position_frame.pack(fill=tk.X, padx=10, pady=10)
         ttk.Label(position_frame, text="Posición:").pack(side=tk.LEFT, padx=(0,5))
@@ -349,15 +325,13 @@ class EvaluationTab(ttk.Frame):
         self.position_combo = ttk.Combobox(position_frame, textvariable=self.position_var,
                                           values=positions, state="readonly", width=20)
         self.position_combo.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        self.position_combo.current(0)  # Seleccionar "General" por defecto
+        self.position_combo.current(0)
         self.position_combo.bind("<<ComboboxSelected>>", self.on_position_selected)
 
-        # Frame para mostrar criterios disponibles y seleccionados
         criteria_selection_frame = ttk.Frame(criteria_frame)
         criteria_selection_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # Frame para criterios disponibles
-        available_criteria_frame = ttk.LabelFrame(criteria_selection_frame, text="Disponibles") # Título más corto
+        available_criteria_frame = ttk.LabelFrame(criteria_selection_frame, text="Disponibles")
         available_criteria_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 2))
         self.available_criteria_listbox = tk.Listbox(available_criteria_frame, height=5,
                                                       bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
@@ -367,8 +341,7 @@ class EvaluationTab(ttk.Frame):
                                                       font=("Arial", 10))
         self.available_criteria_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Frame para criterios seleccionados
-        selected_criteria_frame = ttk.LabelFrame(criteria_selection_frame, text="Seleccionados") # Título más corto
+        selected_criteria_frame = ttk.LabelFrame(criteria_selection_frame, text="Seleccionados")
         selected_criteria_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(2, 0))
         self.criteria_listbox = tk.Listbox(selected_criteria_frame, height=5,
                                            bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
@@ -378,7 +351,6 @@ class EvaluationTab(ttk.Frame):
                                            font=("Arial", 10))
         self.criteria_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Botones para añadir/eliminar criterios
         criteria_buttons_frame = ttk.Frame(criteria_frame)
         criteria_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
         add_criteria_button = ttk.Button(criteria_buttons_frame, text="Añadir →", command=self.add_selected_criteria)
@@ -386,51 +358,44 @@ class EvaluationTab(ttk.Frame):
         remove_criteria_button = ttk.Button(criteria_buttons_frame, text="← Eliminar", command=self.remove_criteria)
         remove_criteria_button.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(2, 0))
 
-        # Inicializar la lista de criterios disponibles
         self.update_available_criteria("General")
 
-        # Frame para parámetros de evaluación
         params_frame = ttk.LabelFrame(left_frame, text="Parámetros de Evaluación")
         params_frame.pack(fill=tk.X, pady=5, ipady=5)
 
-        # Nivel de consenso
         consensus_frame = ttk.Frame(params_frame)
         consensus_frame.pack(fill=tk.X, padx=10, pady=5)
         ttk.Label(consensus_frame, text="Nivel de consenso (0-1):").pack(side=tk.LEFT)
-        self.consensus_var = StringVar(value="0.8")
+        self.consensus_var = StringVar(value="0.90") # Nivel de consenso por defecto
         consensus_entry = ttk.Entry(consensus_frame, textvariable=self.consensus_var, width=5)
         consensus_entry.pack(side=tk.RIGHT)
 
-        # Máximo de rondas
         rounds_frame = ttk.Frame(params_frame)
         rounds_frame.pack(fill=tk.X, padx=10, pady=5)
         ttk.Label(rounds_frame, text="Máximo de rondas:").pack(side=tk.LEFT)
-        self.rounds_var = StringVar(value="3")
+        self.rounds_var = StringVar(value="3") #Máximo de rondas por defecto
         rounds_entry = ttk.Entry(rounds_frame, textvariable=self.rounds_var, width=5)
         rounds_entry.pack(side=tk.RIGHT)
 
-        # Botón para iniciar evaluación
         self.evaluate_button = ttk.Button(left_frame, text="Evaluar Jugadores", command=self.evaluate_players)
-        self.evaluate_button.pack(fill=tk.X, pady=10, ipady=5) # Añadido ipady para un botón más grande
+        self.evaluate_button.pack(fill=tk.X, pady=10, ipady=5)
 
         # --- FRAME DERECHO ---
 
-        # Área de texto para mostrar resultados
         results_frame = ttk.LabelFrame(right_frame, text="Resultados de la Evaluación")
         results_frame.pack(fill=tk.BOTH, expand=True, ipady=5)
 
         self.results_text = tk.Text(results_frame, wrap=tk.WORD, state=tk.DISABLED,
                                     bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                    insertbackground=self.colors["fg_white"], # Cursor más brillante
+                                    insertbackground=self.colors["fg_white"],
                                     borderwidth=0, highlightthickness=0,
-                                    font=("Arial", 10), relief=tk.FLAT, padx=5, pady=5) # Padding añadido
+                                    font=("Arial", 10), relief=tk.FLAT, padx=5, pady=5)
         self.results_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT, padx=5, pady=5)
 
         results_scrollbar = ttk.Scrollbar(results_frame, command=self.results_text.yview)
         results_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.results_text.config(yscrollcommand=results_scrollbar.set)
 
-        # Añadir mensaje inicial
         self.add_result("Bienvenido al sistema de evaluación de jugadores.\n\n"
                        "Instrucciones:\n"
                        "1. Seleccione hasta 3 jugadores\n"
@@ -439,12 +404,15 @@ class EvaluationTab(ttk.Frame):
                        "4. Haga clic en 'Evaluar Jugadores'\n\n"
                        "Los agentes evaluarán a los jugadores y mostrarán los resultados aquí.")
 
+        self.export_pdf_button = ttk.Button(left_frame, text="Exportar a PDF", command=self.exportar_pdf, state=tk.DISABLED)
+        self.export_pdf_button.pack(fill=tk.X, pady=5, ipady=5)
+
     def set_agents(self, agente_qwen, agente_gemini, agente_groq):
         """Establece los agentes para la evaluación"""
         self.agente_qwen = agente_qwen
         self.agente_gemini = agente_gemini
         self.agente_groq = agente_groq
-        # Asegurarse que results_text existe antes de llamar a add_result
+
         if hasattr(self, 'results_text') and self.results_text.winfo_exists():
             self.add_result("Los agentes están listos para la evaluación.")
 
@@ -460,47 +428,34 @@ class EvaluationTab(ttk.Frame):
 
     def on_season_selected(self, event):
         """Maneja la selección de una temporada"""
-        # Recargar los datos con la nueva temporada
+
         self.load_player_data()
-        # Limpiar la lista de jugadores
         self.players_listbox.delete(0, tk.END)
-        # Limpiar la búsqueda
         self.search_var.set("")
 
     def on_search_key_release(self, event):
         """Maneja la búsqueda de jugadores mientras se escribe"""
         search_text = self.search_var.get().lower()
 
-        # Limpiar la lista actual
         self.players_listbox.delete(0, tk.END)
 
         if not search_text or self.df_players is None:
             return
 
         try:
-            # Filtrar jugadores que coincidan con la búsqueda
             if 'normalized_name' not in self.df_players.columns:
-                # Crear 'normalized_name' si no existe, manejando posibles NaNs en 'Player'
                 self.df_players['normalized_name'] = self.df_players['Player'].fillna('').astype(str).str.lower()
 
-
-            # Asegurarse que 'normalized_name' sea de tipo string para operaciones de string
-            # Esto es crucial si 'Player' puede tener valores no-string que no se convierten bien
             mask = self.df_players['normalized_name'].astype(str).str.contains(search_text, na=False)
             filtered_players = self.df_players[mask]
 
-
-            # Limitar a 20 resultados para no sobrecargar la interfaz
             filtered_players = filtered_players.head(20)
 
-            # Limpiar y rellenar el diccionario de datos de jugadores
             self.player_data_dict.clear()
 
-            # Añadir jugadores a la listbox
-            for index, player_row in filtered_players.iterrows(): # Usar player_row para evitar conflicto
+            for index, player_row in filtered_players.iterrows():
                 player_name = player_row.get('Player', 'Desconocido')
-                # Guardar los datos del jugador para usarlos más tarde
-                self.player_data_dict[player_name] = player_row # Guardar el Series completo
+                self.player_data_dict[player_name] = player_row
 
                 self.players_listbox.insert(tk.END, player_name)
         except Exception as e:
@@ -516,17 +471,14 @@ class EvaluationTab(ttk.Frame):
 
         display_name = self.players_listbox.get(selection[0])
 
-        # Verificar si ya está en la lista
         if display_name in self.selected_players:
             messagebox.showinfo("Información", f"El jugador '{display_name}' ya está seleccionado.")
             return
 
-        # Verificar si ya hay 3 jugadores seleccionados
         if len(self.selected_players) >= self.max_players:
             messagebox.showinfo("Información", f"Solo puede seleccionar hasta {self.max_players} jugadores.")
             return
 
-        # Añadir a la lista y actualizar la interfaz
         self.selected_players.append(display_name)
         self.selected_players_listbox.insert(tk.END, display_name)
 
@@ -540,8 +492,7 @@ class EvaluationTab(ttk.Frame):
         index = selection[0]
         player_name = self.selected_players_listbox.get(index)
 
-        # Eliminar de la lista y actualizar la interfaz
-        if player_name in self.selected_players: # Asegurarse que está en la lista antes de remover
+        if player_name in self.selected_players:
              self.selected_players.remove(player_name)
         self.selected_players_listbox.delete(index)
 
@@ -553,13 +504,10 @@ class EvaluationTab(ttk.Frame):
 
     def update_available_criteria(self, position):
         """Actualiza la lista de criterios disponibles según la posición seleccionada"""
-        # Limpiar la lista actual
         self.available_criteria_listbox.delete(0, tk.END)
 
-        # Añadir los criterios predefinidos para la posición seleccionada
         if position in self.predefined_criteria:
-            for criteria_item in self.predefined_criteria[position]: # Renombrar criteria a criteria_item
-                # Solo añadir si no está ya en la lista de seleccionados
+            for criteria_item in self.predefined_criteria[position]:
                 if criteria_item not in self.selected_criteria:
                     self.available_criteria_listbox.insert(tk.END, criteria_item)
 
@@ -571,18 +519,15 @@ class EvaluationTab(ttk.Frame):
             messagebox.showinfo("Información", "Por favor, seleccione un criterio de la lista disponible.")
             return
 
-        criteria_item = self.available_criteria_listbox.get(selection[0]) # Renombrar criteria a criteria_item
+        criteria_item = self.available_criteria_listbox.get(selection[0])
 
-        # Verificar si ya está en la lista
         if criteria_item in self.selected_criteria:
             messagebox.showinfo("Información", f"El criterio '{criteria_item}' ya está en la lista.")
             return
 
-        # Añadir a la lista y actualizar la interfaz
         self.selected_criteria.append(criteria_item)
         self.criteria_listbox.insert(tk.END, criteria_item)
 
-        # Eliminar de la lista de disponibles
         self.available_criteria_listbox.delete(selection[0])
 
     def remove_criteria(self):
@@ -593,40 +538,33 @@ class EvaluationTab(ttk.Frame):
             return
 
         index = selection[0]
-        criteria_item = self.criteria_listbox.get(index) # Renombrar criteria a criteria_item
+        criteria_item = self.criteria_listbox.get(index)
 
-        # Eliminar de la lista y actualizar la interfaz
-        if criteria_item in self.selected_criteria: # Asegurarse que está en la lista antes de remover
+        if criteria_item in self.selected_criteria:
             self.selected_criteria.remove(criteria_item)
         self.criteria_listbox.delete(index)
 
-        # Añadir de nuevo a disponibles si estaba predefinido para la posición actual
         current_pos = self.position_var.get()
         if current_pos in self.predefined_criteria and \
            criteria_item in self.predefined_criteria[current_pos]:
-            # Solo añadir si no está ya en la lista de disponibles (evitar duplicados)
             if criteria_item not in self.available_criteria_listbox.get(0, tk.END):
                  self.available_criteria_listbox.insert(tk.END, criteria_item)
 
 
     def evaluate_players(self):
         """Inicia el proceso de evaluación de jugadores"""
-        # Verificar que haya jugadores seleccionados
         if not self.selected_players:
             messagebox.showinfo("Información", "Por favor, seleccione al menos un jugador.")
             return
 
-        # Verificar que haya criterios seleccionados
         if not self.selected_criteria:
             messagebox.showinfo("Información", "Por favor, ingrese al menos un criterio.")
             return
 
-        # Verificar que los agentes estén inicializados
         if not all([self.agente_qwen, self.agente_gemini, self.agente_groq]):
             messagebox.showinfo("Información", "Los agentes aún no están inicializados. Por favor, espere.")
             return
 
-        # Obtener parámetros
         try:
             consenso_minimo = float(self.consensus_var.get())
             if not (0 <= consenso_minimo <= 1):
@@ -645,33 +583,67 @@ class EvaluationTab(ttk.Frame):
             messagebox.showinfo("Información", "Por favor, ingrese un valor numérico válido para el máximo de rondas.")
             return
 
-        # Deshabilitar el botón de evaluación mientras se procesa
         self.evaluate_button.config(state=tk.DISABLED)
 
-        # Limpiar el área de resultados
         self.results_text.config(state=tk.NORMAL)
         self.results_text.delete("1.0", tk.END)
         self.results_text.config(state=tk.DISABLED)
 
-        # Añadir mensaje de inicio
         self.add_result("Iniciando evaluación de jugadores...\n")
         self.add_result(f"Jugadores: {', '.join(self.selected_players)}")
         self.add_result(f"Criterios: {', '.join(self.selected_criteria)}")
         self.add_result(f"Nivel de consenso: {consenso_minimo}")
         self.add_result(f"Máximo de rondas: {max_rondas}")
 
-        # Iniciar evaluación en un hilo separado para no bloquear la interfaz
-        threading.Thread(target=self.run_evaluation, args=(
+        threading.Thread(target=self.ejecutar_evaluacion, args=(
             self.selected_players,
             self.selected_criteria,
             consenso_minimo,
             max_rondas
-        ), daemon=True).start() # daemon=True para que el hilo se cierre si la app principal se cierra
+        ), daemon=True).start()
 
-    def run_evaluation(self, jugadores, criterios, consenso_minimo, max_rondas):
+    def exportar_pdf(self):
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.cell(0, 10, "Resultados de la Evaluación", ln=True)
+        pdf.ln(5)
+
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, "Matrices:", ln=True)
+        pdf.set_font("Arial", size=10)
+        for nombre, matriz in (self.resultados_evaluacion.get("matrices") or {}).items():
+            pdf.cell(0, 8, f"{nombre}:", ln=True)
+            for fila in matriz:
+                pdf.cell(0, 8, ", ".join(str(x) for x in fila), ln=True)
+            pdf.ln(2)
+
+        if self.resultados_evaluacion.get("discusiones"):
+            pdf.set_font("Arial", style="B", size=12)
+            pdf.cell(0, 10, "Discusiones:", ln=True)
+            pdf.set_font("Arial", size=10)
+            pdf.multi_cell(0, 8, str(self.resultados_evaluacion["discusiones"]))
+            pdf.ln(2)
+
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, "Nivel de Consenso (CR):", ln=True)
+        pdf.set_font("Arial", size=10)
+        pdf.cell(0, 8, str(self.resultados_evaluacion.get("crs", "")), ln=True)
+        pdf.ln(2)
+
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, "Ranking Final:", ln=True)
+        pdf.set_font("Arial", size=10)
+        for jugador, puntuacion in (self.resultados_evaluacion.get("ranking") or []):
+            pdf.cell(0, 8, f"{jugador}: {puntuacion}", ln=True)
+
+        pdf.output("evaluacion_resultados.pdf")
+        messagebox.showinfo("Exportación", "PDF exportado correctamente.")
+
+    def ejecutar_evaluacion(self, jugadores, criterios, consenso_minimo, max_rondas):
         """Ejecuta el proceso de evaluación en un hilo separado"""
         try:
-            # Crear el prompt para los agentes
             prompt_template = ChatPromptTemplate.from_messages([
                 (
                     "system",
@@ -701,15 +673,14 @@ class EvaluationTab(ttk.Frame):
             prompt = prompt_template.format(jugadores=jugadores, criterios=criterios)
             max_intentos = 3
 
-            def procesar_csv_agente(output_agente, criterios_list): # Renombrar criterios a criterios_list
+            def procesar_csv_agente(output_agente, criterios_list):
                 matriz = []
                 try:
                     csv_match = re.search(r'```(?:csv|CSV)\s*([\s\S]*?)```', output_agente)
                     if csv_match:
                         csv_content = csv_match.group(1).strip()
-                    else: # Fallback si no hay ```CSV```
+                    else:
                         lines = output_agente.strip().split('\n')
-                        # Heurística: encontrar la línea que parece ser el encabezado
                         header_line_index = -1
                         for i, line in enumerate(lines):
                             if "jugador" in line.lower() and all(c.lower() in line.lower() for c in criterios_list):
@@ -717,7 +688,7 @@ class EvaluationTab(ttk.Frame):
                                 break
                         if header_line_index != -1:
                              csv_content = '\n'.join(lines[header_line_index:]).strip()
-                        else: # Si no se encuentra un encabezado claro, intentar con las últimas líneas que tengan comas
+                        else:
                             potential_csv_lines = [line for line in lines if line.count(',') >= len(criterios_list)-1]
                             if potential_csv_lines:
                                 csv_content = "\n".join(potential_csv_lines)
@@ -736,15 +707,14 @@ class EvaluationTab(ttk.Frame):
                         for criterio_esperado in criterios_list:
                             criterio_esperado_lower = criterio_esperado.lower()
                             valor_encontrado = None
-                            # Buscar el criterio en los encabezados del CSV
+
                             for csv_header in csv_headers:
-                                if criterio_esperado_lower == csv_header: # Coincidencia exacta
-                                    valor_encontrado = row.get(reader.fieldnames[csv_headers.index(csv_header)]) # Usar el nombre original del fieldname
+                                if criterio_esperado_lower == csv_header:
+                                    valor_encontrado = row.get(reader.fieldnames[csv_headers.index(csv_header)])
                                     break
                                 elif criterio_esperado_lower in csv_header: # Coincidencia parcial (contenida)
                                     valor_encontrado = row.get(reader.fieldnames[csv_headers.index(csv_header)])
-                                    # Podríamos añadir una lógica para preferir la coincidencia más específica si hay varias
-                                    break # Tomar la primera coincidencia parcial por ahora
+                                    break
 
                             if valor_encontrado is not None:
                                 calificaciones.append(str(valor_encontrado).replace("'", "").replace('"', "").strip())
@@ -757,10 +727,10 @@ class EvaluationTab(ttk.Frame):
                                         self.add_result(f"ADVERTENCIA: Criterio '{criterio_esperado}' no encontrado por nombre, usando posición.")
                                     except (ValueError, IndexError):
                                         self.add_result(f"ERROR: Criterio '{criterio_esperado}' no encontrado en los datos del CSV ni por posición.")
-                                        return [], False # Fallo si un criterio no se puede mapear
+                                        return [], False
                                 else:
                                     self.add_result(f"ERROR: Criterio '{criterio_esperado}' no encontrado en los datos del CSV. Headers: {csv_headers}")
-                                    return [], False # Fallo si un criterio no se puede mapear
+                                    return [], False
                         matriz.append(calificaciones)
                     if not matriz:
                         self.add_result(f"ERROR: No se pudieron extraer datos de la matriz del CSV. Contenido CSV procesado:\n{csv_content}")
@@ -770,8 +740,7 @@ class EvaluationTab(ttk.Frame):
                     self.add_result(f"ERROR: No se pudo procesar la salida del agente: {str(e)}\nContenido CSV intentado:\n{csv_content if 'csv_content' in locals() else 'No disponible'}")
                     return [], False
 
-
-            def generar_matriz_aleatoria(jugadores_list, criterios_list, valores_linguisticos): # Renombrar
+            def generar_matriz_aleatoria(jugadores_list, criterios_list, valores_linguisticos):
                 import random
                 matriz = []
                 for _ in jugadores_list:
@@ -779,7 +748,7 @@ class EvaluationTab(ttk.Frame):
                     matriz.append(calificaciones)
                 return matriz
 
-            def evaluar_con_agente(agente, prompt_str, jugadores_list, criterios_list, valores_linguisticos, nombre_agente, max_intentos_agente): # Renombrar
+            def evaluar_con_agente(agente, prompt_str, jugadores_list, criterios_list, valores_linguisticos, nombre_agente, max_intentos_agente):
                 self.add_result(f"\n=== Evaluación con el Agente {nombre_agente} ===")
                 intento_actual = 0
                 matriz_agente = []
@@ -817,7 +786,6 @@ class EvaluationTab(ttk.Frame):
                         break
                     else:
                         self.add_result(f"Formato CSV no válido del agente {nombre_agente}. Reintentando...")
-                        # Modificar el prompt para el reintento podría ser útil aquí, pero por ahora solo reintenta.
 
                 if not matriz_agente:
                     self.add_result(f"Generando valores lingüísticos aleatorios para el agente {nombre_agente}...")
@@ -827,7 +795,6 @@ class EvaluationTab(ttk.Frame):
                 return matriz_agente, output_agente if 'output_agente' in locals() else "No se obtuvo respuesta."
 
 
-            # Evaluación con los agentes
             self.add_result("\nIniciando evaluación con los agentes...")
 
             matriz_agente_qwen, _ = evaluar_con_agente(
@@ -840,11 +807,9 @@ class EvaluationTab(ttk.Frame):
                 self.agente_groq, prompt, jugadores, criterios, self.valores_linguisticos, "Groq", max_intentos)
 
 
-            # Solicitar evaluación del usuario
             self.add_result("\n\nAhora es tu turno de evaluar a los jugadores.")
             self.add_result("Por favor, selecciona las calificaciones en la ventana emergente.")
 
-            # Crear ventana emergente para la evaluación del usuario
             user_matrices = self.get_user_evaluation(jugadores, criterios)
 
             if not user_matrices:
@@ -865,10 +830,10 @@ class EvaluationTab(ttk.Frame):
             self.add_result("\nCalculando matrices FLPR...")
 
             flpr_matrices = {}
-            for nombre, matriz_eval in matrices.items(): # Renombrar matriz a matriz_eval
-                if not matriz_eval or not any(matriz_eval): # Comprobar si la matriz está vacía o contiene solo listas vacías
+            for nombre, matriz_eval in matrices.items():
+                if not matriz_eval or not any(matriz_eval):
                     self.add_result(f"ADVERTENCIA: Matriz de evaluación para '{nombre}' está vacía. Saltando cálculo de FLPR.")
-                    flpr_matrices[nombre] = None # O una FLPR por defecto si es necesario
+                    flpr_matrices[nombre] = None
                     continue
 
                 flpr_matriz_calculada = None
@@ -897,7 +862,6 @@ class EvaluationTab(ttk.Frame):
             flpr_agente_gemini = flpr_matrices.get("Gemini")
             flpr_agente_groq = flpr_matrices.get("Groq")
 
-            # Manejar el caso donde alguna FLPR sea None antes de calcular FLPR comunes
             flpr_validas_agentes = [f for f in [flpr_agente_qwen, flpr_agente_gemini, flpr_agente_groq] if f is not None]
 
             if len(flpr_validas_agentes) < 2:
@@ -905,7 +869,7 @@ class EvaluationTab(ttk.Frame):
                 flpr_agentes = None
             elif len(flpr_validas_agentes) == 2:
                 flpr_agentes = calcular_flpr_comun(flpr_validas_agentes[0], flpr_validas_agentes[1])
-            else: # 3 FLPRs válidas
+            else:
                 flpr_agentes_temp = calcular_flpr_comun(flpr_validas_agentes[0], flpr_validas_agentes[1])
                 flpr_agentes = calcular_flpr_comun(flpr_agentes_temp, flpr_validas_agentes[2])
 
@@ -924,8 +888,6 @@ class EvaluationTab(ttk.Frame):
                     self.evaluate_button.config(state=tk.NORMAL)
                 return
 
-
-            # Calcular matrices de similitud solo si las FLPRs son válidas
             matrices_similitud_validas = []
             if flpr_usuario is not None and flpr_agente_qwen is not None: matrices_similitud_validas.append(calcular_matriz_similitud(flpr_usuario, flpr_agente_qwen))
             if flpr_usuario is not None and flpr_agente_gemini is not None: matrices_similitud_validas.append(calcular_matriz_similitud(flpr_usuario, flpr_agente_gemini))
@@ -945,7 +907,6 @@ class EvaluationTab(ttk.Frame):
                 "Agente Groq": matriz_agente_groq
             }
 
-            # Mostrar diálogo para revisar matrices
             matrices_revisadas = self.review_agent_matrices(jugadores, criterios, matrices_originales)
 
             if matrices_revisadas is not None:
@@ -989,11 +950,9 @@ class EvaluationTab(ttk.Frame):
             self.add_result(f"Nivel de consenso (CR): {cr:.3f}") # Formatear CR
             self.add_result(f"Consenso mínimo requerido: {consenso_minimo}")
 
-            # Calcular y mostrar el ranking de agentes según su distancia al consenso
             self.add_result(f"\n=== Ranking de Agentes por Distancia al Consenso ===")
             self.add_result("Este ranking muestra qué agentes están más lejos de la opinión colectiva:")
 
-            # Calcular la similitud de cada agente con la FLPR colectiva
             distancias_agentes = []
 
             if flpr_usuario is not None and flpr_colectiva is not None:
@@ -1016,14 +975,11 @@ class EvaluationTab(ttk.Frame):
                 distancia_groq = 1 - similitud_groq
                 distancias_agentes.append(("Agente Groq", distancia_groq))
 
-            # Ordenar por distancia (de mayor a menor)
             distancias_agentes.sort(key=lambda x: x[1], reverse=True)
 
-            # Mostrar el ranking
             for posicion, (agente, distancia) in enumerate(distancias_agentes, 1):
                 self.add_result(f"{posicion}. {agente} - Distancia al consenso: {distancia:.3f}")
 
-            # Explicar el impacto en el consenso global
             if distancias_agentes:
                 agente_mas_lejano = distancias_agentes[0][0]
                 distancia_maxima = distancias_agentes[0][1]
@@ -1056,11 +1012,9 @@ class EvaluationTab(ttk.Frame):
                 matriz_agente_gemini_actual = matriz_agente_gemini
                 matriz_agente_groq_actual = matriz_agente_groq
 
-                # Bucle de rondas de discusión
                 while ronda_actual <= max_rondas and not consenso_alcanzado_nuevo:
                     self.add_result(f"\n\n=== RONDA DE DISCUSIÓN {ronda_actual}/{max_rondas} ===")
 
-                    # Formatear calificaciones para mostrar a los agentes
                     def formatear_calificaciones(jugadores_list, criterios_list, matriz, nombre_agente):
                         calificaciones_str = f"Mis calificaciones como agente {nombre_agente} para los jugadores son:\n"
                         for i, jugador in enumerate(jugadores_list):
@@ -1070,12 +1024,10 @@ class EvaluationTab(ttk.Frame):
                             calificaciones_str = calificaciones_str.rstrip(", ") + "\n"
                         return calificaciones_str
 
-                    # Preparar las cadenas de calificaciones para esta ronda
                     calificaciones_qwen_str = formatear_calificaciones(jugadores, criterios, matriz_agente_qwen_actual, f"Qwen (Ronda {ronda_actual})")
                     calificaciones_gemini_str = formatear_calificaciones(jugadores, criterios, matriz_agente_gemini_actual, f"Gemini (Ronda {ronda_actual})")
                     calificaciones_groq_str = formatear_calificaciones(jugadores, criterios, matriz_agente_groq_actual, f"Groq (Ronda {ronda_actual})")
 
-                    # Para el usuario usamos un formato ligeramente diferente
                     calificaciones_usuario_str = f"Las calificaciones del usuario para los jugadores (Ronda {ronda_actual}) son:\n"
                     for i, jugador in enumerate(jugadores):
                         calificaciones_usuario_str += f"{jugador}: "
@@ -1114,11 +1066,9 @@ class EvaluationTab(ttk.Frame):
                     self.agente_groq.invoke({"input": f"El agente Gemini ha dado estas calificaciones: {calificaciones_gemini_str}\n "
                                             f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Gemini recordadas'."})
 
-                    # Crear ventana de discusión
                     self.add_result(f"\n=== Discusión sobre las valoraciones (Ronda {ronda_actual}/{max_rondas}) ===")
                     self.add_result("Ahora puedes discutir con los agentes sobre las valoraciones realizadas.")
 
-                    # Crear ventana emergente para la discusión
                     discusion_window = tk.Toplevel(self.master)
                     discusion_window.configure(background=self.colors["bg_dark_widget"])
                     discusion_window.title(f"Discusión sobre valoraciones - Ronda {ronda_actual}/{max_rondas}")
@@ -1126,55 +1076,43 @@ class EvaluationTab(ttk.Frame):
                     discusion_window.transient(self.master)
                     discusion_window.grab_set()
 
-                    # Frame principal
                     main_frame = ttk.Frame(discusion_window, padding=10)
                     main_frame.pack(fill=tk.BOTH, expand=True)
 
-                    # Instrucciones
-                    ttk.Label(main_frame, text=f"Discusión sobre valoraciones (Ronda {ronda_actual}/{max_rondas}):", 
+                    ttk.Label(main_frame, text=f"Discusión sobre valoraciones (Ronda {ronda_actual}/{max_rondas}):",
                              font=("Arial", 11, "bold")).pack(pady=(0, 15))
 
-                    # Frame para selección de agente
                     selection_frame = ttk.Frame(main_frame)
                     selection_frame.pack(fill=tk.X, pady=(0, 10))
 
                     ttk.Label(selection_frame, text="Selecciona un agente:").pack(side=tk.LEFT, padx=(0, 10))
 
-                    # Variable para el agente seleccionado
                     selected_agent = StringVar(value="Qwen")
 
-                    # Combobox para seleccionar agente
-                    agent_selector = ttk.Combobox(selection_frame, textvariable=selected_agent, 
+                    agent_selector = ttk.Combobox(selection_frame, textvariable=selected_agent,
                                                  values=["Qwen", "Gemini", "Groq"], state="readonly", width=15)
                     agent_selector.pack(side=tk.LEFT)
 
-                    # Frame para el historial de la conversación
                     conversation_frame = ttk.Frame(main_frame)
                     conversation_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-                    # Crear un widget Text para mostrar la conversación
                     conversation_text = tk.Text(conversation_frame, wrap=tk.WORD, width=80, height=15,
                                               bg=self.colors["bg_dark_widget"], fg=self.colors["fg_light"])
                     conversation_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-                    # Scrollbar para el texto
                     scrollbar = ttk.Scrollbar(conversation_frame, command=conversation_text.yview)
                     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
                     conversation_text.config(yscrollcommand=scrollbar.set)
 
-                    # Frame para entrada de texto
                     input_frame = ttk.Frame(main_frame)
                     input_frame.pack(fill=tk.X, pady=(10, 0))
 
-                    # Entrada de texto
                     user_input = tk.Text(input_frame, wrap=tk.WORD, width=80, height=3,
                                        bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"])
                     user_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
 
-                    # Historial de la conversación
                     conversation_history = []
 
-                    # Función para enviar mensaje
                     def send_message():
                         agent_name = selected_agent.get()
                         message = user_input.get("1.0", tk.END).strip()
@@ -1182,15 +1120,12 @@ class EvaluationTab(ttk.Frame):
                         if not message:
                             return
 
-                        # Añadir mensaje del usuario al historial
                         conversation_text.config(state=tk.NORMAL)
                         conversation_text.insert(tk.END, f"\nTú: {message}\n")
                         conversation_history.append(("user", message))
 
-                        # Limpiar entrada
                         user_input.delete("1.0", tk.END)
 
-                        # Preparar prompt para el agente
                         prompt_discusion = f"""
                             Basándote en las calificaciones y la discusión anterior, por favor, responde a la siguiente pregunta: {message}
                             No uses ninguna tool ni evalúes a los jugadores, solo responde esta pregunta.
@@ -1200,15 +1135,12 @@ class EvaluationTab(ttk.Frame):
                             Si recibes una orden, explica tu punta de vista pero debes respetar la orden.
                         """
 
-                        # Seleccionar el agente adecuado para responder
                         conversation_text.insert(tk.END, f"\n{agent_name} está respondiendo...\n")
                         conversation_text.see(tk.END)
                         conversation_text.config(state=tk.DISABLED)
 
-                        # Actualizar la interfaz
                         discusion_window.update()
 
-                        # Invocar al agente seleccionado
                         if agent_name == "Qwen":
                             respuesta = self.agente_qwen.invoke({"input": prompt_discusion})
                             agent_response = respuesta.get("output", "No hay respuesta")
@@ -1219,7 +1151,6 @@ class EvaluationTab(ttk.Frame):
                             respuesta = self.agente_groq.invoke({"input": prompt_discusion})
                             agent_response = respuesta.get("output", "No hay respuesta")
 
-                        # Añadir respuesta del agente al historial
                         conversation_text.config(state=tk.NORMAL)
                         conversation_text.delete("end-2l", tk.END)
                         conversation_text.insert(tk.END, f"\n{agent_name}: {agent_response}\n")
@@ -1251,24 +1182,19 @@ class EvaluationTab(ttk.Frame):
                     continue_button = ttk.Button(button_frame, text="Finalizar discusión y continuar", command=on_continue)
                     continue_button.pack(side=tk.RIGHT, padx=5, expand=True)
 
-                    # Mensaje inicial
                     conversation_text.config(state=tk.NORMAL)
                     conversation_text.insert(tk.END, "Bienvenido a la discusión sobre valoraciones. Selecciona un agente y haz preguntas sobre las valoraciones.\n")
                     conversation_text.config(state=tk.DISABLED)
 
-                    # Esperar a que se cierre la ventana
                     self.master.wait_window(discusion_window)
 
-                    # Si se canceló la discusión, salir del bucle
                     if not continue_reevaluation[0]:
                         self.add_result("\nDiscusión cancelada. Finalizando evaluación.")
                         break
 
-                    # Re-evaluación después de la discusión
                     self.add_result(f"\n=== Re-evaluación de jugadores (Ronda {ronda_actual}/{max_rondas}) ===")
                     self.add_result("Los agentes volverán a evaluar a los jugadores basándose en la discusión anterior.")
 
-                    # Re-evaluación con el agente Qwen
                     prompt_reevaluacion_qwen = f"""
                     Basándote en nuestra discusión anterior sobre las valoraciones de los jugadores, 
                     por favor, vuelve a evaluar a los siguientes jugadores: {', '.join(jugadores)} 
@@ -1277,7 +1203,6 @@ class EvaluationTab(ttk.Frame):
                     Proporciona tu nueva evaluación en el mismo formato CSV que usaste anteriormente.
                     """
 
-                    # Re-evaluación con el agente Gemini
                     prompt_reevaluacion_gemini = f"""
                     Basándote en nuestra discusión anterior sobre las valoraciones de los jugadores, 
                     por favor, vuelve a evaluar a los siguientes jugadores: {', '.join(jugadores)} 
@@ -1298,7 +1223,6 @@ class EvaluationTab(ttk.Frame):
                     Proporciona tu nueva evaluación en el mismo formato CSV que usaste anteriormente.
                     """
 
-                    # Re-evaluación con el agente Groq
                     prompt_reevaluacion_groq = f"""
                     Basándote en nuestra discusión anterior sobre las valoraciones de los jugadores, 
                     por favor, vuelve a evaluar a los siguientes jugadores: {', '.join(jugadores)} 
@@ -1321,7 +1245,6 @@ class EvaluationTab(ttk.Frame):
 
                     max_intentos_reevaluacion = 3
 
-                    # Re-evaluación con el agente Qwen
                     self.add_result(f"\n=== Re-evaluación con el Agente Qwen (Ronda {ronda_actual}/{max_rondas}) ===")
                     matriz_agente_qwen_nueva, output_reevaluacion_qwen = evaluar_con_agente(
                         self.agente_qwen, prompt_reevaluacion_qwen, jugadores, criterios, self.valores_linguisticos, "Qwen", max_intentos_reevaluacion)
@@ -1329,7 +1252,6 @@ class EvaluationTab(ttk.Frame):
                     self.add_result("\n=== Nueva evaluación del agente Qwen ===")
                     self.add_result(output_reevaluacion_qwen)
 
-                    # Re-evaluación con el agente Gemini
                     self.add_result(f"\n=== Re-evaluación con el Agente Gemini (Ronda {ronda_actual}/{max_rondas}) ===")
                     matriz_agente_gemini_nueva, output_reevaluacion_gemini = evaluar_con_agente(
                         self.agente_gemini, prompt_reevaluacion_gemini, jugadores, criterios, self.valores_linguisticos, "Gemini", max_intentos_reevaluacion)
@@ -1337,7 +1259,6 @@ class EvaluationTab(ttk.Frame):
                     self.add_result("\n=== Nueva evaluación del agente Gemini ===")
                     self.add_result(output_reevaluacion_gemini)
 
-                    # Re-evaluación con el agente Groq
                     self.add_result(f"\n=== Re-evaluación con el Agente Groq (Ronda {ronda_actual}/{max_rondas}) ===")
                     matriz_agente_groq_nueva, output_reevaluacion_groq = evaluar_con_agente(
                         self.agente_groq, prompt_reevaluacion_groq, jugadores, criterios, self.valores_linguisticos, "Groq", max_intentos_reevaluacion)
@@ -1345,7 +1266,6 @@ class EvaluationTab(ttk.Frame):
                     self.add_result("\n=== Nueva evaluación del agente Groq ===")
                     self.add_result(output_reevaluacion_groq)
 
-                    # Re-evaluación del usuario
                     self.add_result(f"\n=== Re-evaluación del usuario (Ronda {ronda_actual}/{max_rondas}) ===")
                     self.add_result("Ahora es tu turno de volver a evaluar a los jugadores después de la discusión.")
 
@@ -1354,7 +1274,6 @@ class EvaluationTab(ttk.Frame):
                         self.add_result("❌ Re-evaluación del usuario cancelada. Finalizando evaluación.")
                         break
 
-                    # Calcular nuevas matrices FLPR
                     matrices_nuevas = {
                         "Usuario": matriz_usuario_nueva,
                         "Agente Qwen": matriz_agente_qwen_nueva,
@@ -1371,16 +1290,13 @@ class EvaluationTab(ttk.Frame):
 
                     self.add_result(f"\n=== Matriz FLPR Final del Usuario (Después de la ronda {ronda_actual} de discusión) ===")
 
-                    # Calcular matriz FLPR colectiva entre los agentes después de la reevaluación
                     flpr_agentes_qwen_gemini_nueva = calcular_flpr_comun(flpr_agente_qwen_nueva, flpr_agente_gemini_nueva)
                     flpr_agentes_nueva = calcular_flpr_comun(flpr_agentes_qwen_gemini_nueva, flpr_agente_groq_nueva)
                     self.add_result(f"\n=== Matriz FLPR Colectiva (Agentes) (Después de la ronda {ronda_actual} de discusión) ===")
 
-                    # Calcular matriz FLPR colectiva después de la reevaluación
                     flpr_colectiva_nueva = calcular_flpr_comun(flpr_agentes_nueva, flpr_usuario_nueva)
                     self.add_result(f"\n=== Matriz FLPR Colectiva (Usuario y Agentes) (Después de la ronda {ronda_actual} de discusión) ===")
 
-                    # Calcular matrices de similitud después de la discusión
                     matrices_similitud_nuevas = []
                     if flpr_usuario_nueva is not None and flpr_agente_qwen_nueva is not None: matrices_similitud_nuevas.append(calcular_matriz_similitud(flpr_usuario_nueva, flpr_agente_qwen_nueva))
                     if flpr_usuario_nueva is not None and flpr_agente_gemini_nueva is not None: matrices_similitud_nuevas.append(calcular_matriz_similitud(flpr_usuario_nueva, flpr_agente_gemini_nueva))
@@ -1389,7 +1305,6 @@ class EvaluationTab(ttk.Frame):
                     if flpr_agente_qwen_nueva is not None and flpr_agente_groq_nueva is not None: matrices_similitud_nuevas.append(calcular_matriz_similitud(flpr_agente_qwen_nueva, flpr_agente_groq_nueva))
                     if flpr_agente_gemini_nueva is not None and flpr_agente_groq_nueva is not None: matrices_similitud_nuevas.append(calcular_matriz_similitud(flpr_agente_gemini_nueva, flpr_agente_groq_nueva))
 
-                    # Calcular nivel de consenso después de la discusión
                     if not matrices_similitud_nuevas:
                         self.add_result("ERROR: No se pudieron calcular matrices de similitud nuevas. No se puede determinar el consenso.")
                         cr_nuevo, consenso_alcanzado_nuevo = 0, False
@@ -1405,7 +1320,6 @@ class EvaluationTab(ttk.Frame):
                     else:
                         self.add_result("❌ No se ha alcanzado el nivel mínimo de consenso.")
 
-                    # Comparar el nivel de consenso antes y después de la discusión
                     if cr_nuevo > cr:
                         self.add_result(f"\nEl nivel de consenso ha mejorado después de la discusión: {cr:.3f} → {cr_nuevo:.3f}")
                     elif cr_nuevo < cr:
@@ -1413,7 +1327,6 @@ class EvaluationTab(ttk.Frame):
                     else:
                         self.add_result(f"\nEl nivel de consenso se ha mantenido igual después de la discusión: {cr:.3f}")
 
-                    # Actualizar las variables para la siguiente ronda
                     flpr_usuario_actual = flpr_usuario_nueva
                     flpr_agente_qwen_actual = flpr_agente_qwen_nueva
                     flpr_agente_gemini_actual = flpr_agente_gemini_nueva
@@ -1424,10 +1337,8 @@ class EvaluationTab(ttk.Frame):
                     matriz_agente_gemini_actual = matriz_agente_gemini_nueva
                     matriz_agente_groq_actual = matriz_agente_groq_nueva
 
-                    # Incrementar el contador de rondas
                     ronda_actual += 1
 
-                    # Si se alcanzó el consenso o se llegó al máximo de rondas, mostrar el ranking de jugadores
                     if consenso_alcanzado_nuevo or ronda_actual > max_rondas:
                         self.add_result("\n=== Ranking de Jugadores (Después de la discusión) ===")
                         ranking = calcular_ranking_jugadores(flpr_colectiva_nueva, jugadores)
@@ -1436,16 +1347,13 @@ class EvaluationTab(ttk.Frame):
                         for posicion, (jugador, puntuacion) in enumerate(ranking, 1):
                             self.add_result(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
 
-                        # Si se alcanzó el máximo de rondas sin consenso, dar una última oportunidad para modificar matrices
                         if not consenso_alcanzado_nuevo and ronda_actual > max_rondas:
                             self.add_result(f"\n⚠️ Se ha alcanzado el número máximo de rondas de discusión ({max_rondas}) sin llegar al consenso mínimo requerido.")
                             self.add_result(f"Nivel de consenso actual: {cr_nuevo:.3f}")
 
-                            # Ofrecer una última oportunidad para modificar matrices
                             self.add_result("\n=== Última oportunidad para corregir sesgos ===")
                             self.add_result("Puedes revisar y modificar las matrices de términos lingüísticos una última vez antes de calcular el ranking final.")
 
-                            # Mostrar diálogo para revisar matrices
                             matrices_finales = {
                                 "Usuario": matriz_usuario_actual,
                                 "Agente Qwen": matriz_agente_qwen_actual,
@@ -1456,7 +1364,6 @@ class EvaluationTab(ttk.Frame):
                             matrices_revisadas_final = self.review_agent_matrices(jugadores, criterios, matrices_finales)
 
                             if matrices_revisadas_final is not None:
-                                # Recalcular matrices FLPR
                                 flpr_matrices_final = calcular_matrices_flpr(matrices_revisadas_final, criterios)
 
                                 flpr_usuario_final = flpr_matrices_final["Usuario"]
@@ -1464,12 +1371,10 @@ class EvaluationTab(ttk.Frame):
                                 flpr_agente_gemini_final = flpr_matrices_final["Agente Gemini"]
                                 flpr_agente_groq_final = flpr_matrices_final["Agente Groq"]
 
-                                # Recalcular matriz FLPR colectiva
                                 flpr_agentes_qwen_gemini_final = calcular_flpr_comun(flpr_agente_qwen_final, flpr_agente_gemini_final)
                                 flpr_agentes_final = calcular_flpr_comun(flpr_agentes_qwen_gemini_final, flpr_agente_groq_final)
                                 flpr_colectiva_final = calcular_flpr_comun(flpr_agentes_final, flpr_usuario_final)
 
-                                # Recalcular matrices de similitud
                                 matrices_similitud_final = []
                                 if flpr_usuario_final is not None and flpr_agente_qwen_final is not None: matrices_similitud_final.append(calcular_matriz_similitud(flpr_usuario_final, flpr_agente_qwen_final))
                                 if flpr_usuario_final is not None and flpr_agente_gemini_final is not None: matrices_similitud_final.append(calcular_matriz_similitud(flpr_usuario_final, flpr_agente_gemini_final))
@@ -1478,7 +1383,6 @@ class EvaluationTab(ttk.Frame):
                                 if flpr_agente_qwen_final is not None and flpr_agente_groq_final is not None: matrices_similitud_final.append(calcular_matriz_similitud(flpr_agente_qwen_final, flpr_agente_groq_final))
                                 if flpr_agente_gemini_final is not None and flpr_agente_groq_final is not None: matrices_similitud_final.append(calcular_matriz_similitud(flpr_agente_gemini_final, flpr_agente_groq_final))
 
-                                # Recalcular nivel de consenso
                                 if not matrices_similitud_final:
                                     self.add_result("ERROR: No se pudieron calcular matrices de similitud finales. No se puede determinar el consenso.")
                                     cr_final, consenso_alcanzado_final = 0, False
@@ -1494,7 +1398,6 @@ class EvaluationTab(ttk.Frame):
                                 else:
                                     self.add_result("❌ No se ha alcanzado el nivel mínimo de consenso.")
 
-                                # Recalcular el ranking con las matrices actualizadas
                                 self.add_result("\n=== Ranking de Jugadores (Actualizado) ===")
                                 ranking_final = calcular_ranking_jugadores(flpr_colectiva_final, jugadores)
 
@@ -1506,19 +1409,23 @@ class EvaluationTab(ttk.Frame):
                             else:
                                 self.add_result(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_nuevo:.3f}")
 
-                # Si se alcanzó el consenso inicialmente, mostrar el ranking
                 if consenso_alcanzado:
                     self.add_result("\nSe ha alcanzado el nivel mínimo de consenso. No es necesario realizar la discusión y re-evaluación.")
 
 
             self.add_result("\nEvaluación completada.")
 
+            self.resultados_evaluacion = {
+
+            }
+
+            self.export_pdf_button.config(state=tk.NORMAL)
+
         except Exception as e:
             self.add_result(f"Error durante la evaluación: {str(e)}")
             import traceback
-            self.add_result(f"Traceback: {traceback.format_exc()}") # Añadir traceback para más detalles
+            self.add_result(f"Traceback: {traceback.format_exc()}")
         finally:
-            # Habilitar el botón de evaluación
             if hasattr(self, 'evaluate_button') and self.evaluate_button.winfo_exists():
                  self.evaluate_button.config(state=tk.NORMAL)
 
@@ -1528,53 +1435,43 @@ class EvaluationTab(ttk.Frame):
         Muestra una ventana emergente para que el usuario evalúe a los jugadores.
         Retorna la matriz de evaluación del usuario.
         """
-        # Crear ventana emergente
-        eval_window = tk.Toplevel(self.master) # Usar self.master (la instancia principal de Tk) o self
+        eval_window = tk.Toplevel(self.master)
         eval_window.configure(background=self.colors["bg_dark_widget"])
         eval_window.title("Evaluación de Jugadores")
         eval_window.geometry("700x450") # Tamaño ajustado
         eval_window.transient(self.master) # O self
         eval_window.grab_set()
 
-        # Matriz para almacenar las evaluaciones
-        user_matrix_vars = [] # Nombre diferente para la lista de StringVar
+        user_matrix_vars = []
         for _ in jugadores:
             user_matrix_vars.append([StringVar(value="Medio") for _ in criterios])
 
-        # Frame principal
-        main_frame_eval = ttk.Frame(eval_window, padding=10) # Usar main_frame_eval
+        main_frame_eval = ttk.Frame(eval_window, padding=10)
         main_frame_eval.pack(fill=tk.BOTH, expand=True)
 
-        # Instrucciones
         ttk.Label(main_frame_eval, text="Evalúa a cada jugador según los criterios:", font=("Arial", 11, "bold")).pack(pady=(0, 15))
 
-        # Frame para la tabla de evaluación
         table_frame = ttk.Frame(main_frame_eval)
         table_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Encabezados de columnas (criterios)
         header_font = ("Arial", 10, "bold")
         ttk.Label(table_frame, text="Jugador", font=header_font).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        for i, criterio_item in enumerate(criterios): # Renombrar criterio a criterio_item
+        for i, criterio_item in enumerate(criterios):
             ttk.Label(table_frame, text=criterio_item, font=header_font).grid(row=0, column=i+1, padx=5, pady=5, sticky=tk.W)
 
-        # Filas para cada jugador
         for i, jugador in enumerate(jugadores):
             ttk.Label(table_frame, text=jugador, font=("Arial", 10)).grid(row=i+1, column=0, padx=5, pady=5, sticky=tk.W)
 
             for j in range(len(criterios)):
                 combo = ttk.Combobox(table_frame, textvariable=user_matrix_vars[i][j],
                                     values=self.valores_linguisticos, state="readonly", width=12, font=("Arial", 9))
-                combo.grid(row=i+1, column=j+1, padx=5, pady=5, sticky=tk.EW) # Usar sticky EW para Combobox
-                combo.current(2)  # Valor por defecto: "Medio" (índice 2)
+                combo.grid(row=i+1, column=j+1, padx=5, pady=5, sticky=tk.EW)
+                combo.current(2)
 
-        # Hacer columnas redimensionables para criterios
-        table_frame.grid_columnconfigure(0, weight=1) # Columna de jugador
+        table_frame.grid_columnconfigure(0, weight=1)
         for j in range(len(criterios)):
-            table_frame.grid_columnconfigure(j+1, weight=1) # Columnas de criterios
+            table_frame.grid_columnconfigure(j+1, weight=1)
 
-
-        # Botones
         button_frame = ttk.Frame(main_frame_eval)
         button_frame.pack(fill=tk.X, pady=(15,0))
 
@@ -1599,8 +1496,7 @@ class EvaluationTab(ttk.Frame):
         submit_button = ttk.Button(button_frame, text="Enviar Evaluación", command=on_submit)
         submit_button.pack(side=tk.RIGHT, padx=5, expand=True)
 
-        # Esperar a que se cierre la ventana
-        self.master.wait_window(eval_window) # O self.wait_window
+        self.master.wait_window(eval_window)
 
         return result_matrix[0]
 
@@ -1620,7 +1516,6 @@ class EvaluationTab(ttk.Frame):
         self.add_result("\n=== Revisión de Matrices de Agentes ===")
         self.add_result("Puedes revisar las matrices de términos lingüísticos para identificar posibles sesgos.")
 
-        # Crear ventana emergente
         review_window = tk.Toplevel(self.master)
         review_window.configure(background=self.colors["bg_dark_widget"])
         review_window.title("Revisión de Matrices de Agentes")
@@ -1628,40 +1523,32 @@ class EvaluationTab(ttk.Frame):
         review_window.transient(self.master)
         review_window.grab_set()
 
-        # Frame principal
         main_frame = ttk.Frame(review_window, padding=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Instrucciones
-        ttk.Label(main_frame, text="Revisa las matrices de los agentes y modifica valores si detectas sesgos:", 
+        ttk.Label(main_frame, text="Revisa las matrices de los agentes y modifica valores si detectas sesgos:",
                  font=("Arial", 11, "bold")).pack(pady=(0, 15))
 
-        # Frame para selección de matriz
         selection_frame = ttk.Frame(main_frame)
         selection_frame.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(selection_frame, text="Selecciona una matriz:").pack(side=tk.LEFT, padx=(0, 10))
 
-        # Variable para la matriz seleccionada
         selected_matrix = StringVar(value=list(matrices.keys())[0])
 
-        # Combobox para seleccionar matriz
-        matrix_selector = ttk.Combobox(selection_frame, textvariable=selected_matrix, 
+        matrix_selector = ttk.Combobox(selection_frame, textvariable=selected_matrix,
                                       values=list(matrices.keys()), state="readonly", width=15)
         matrix_selector.pack(side=tk.LEFT)
 
-        # Frame para la tabla de la matriz
         table_container = ttk.Frame(main_frame)
         table_container.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Scrollbar para la tabla
         scrollbar_y = ttk.Scrollbar(table_container)
         scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
 
         scrollbar_x = ttk.Scrollbar(table_container, orient=tk.HORIZONTAL)
         scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Canvas para la tabla (para permitir scroll)
         canvas = tk.Canvas(table_container, yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set,
                           background=self.colors["bg_dark_widget"])
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1669,23 +1556,18 @@ class EvaluationTab(ttk.Frame):
         scrollbar_y.config(command=canvas.yview)
         scrollbar_x.config(command=canvas.xview)
 
-        # Frame dentro del canvas para la tabla
         table_frame = ttk.Frame(canvas)
         canvas.create_window((0, 0), window=table_frame, anchor=tk.NW)
 
-        # Diccionario para almacenar las variables de las matrices
         matrix_vars = {}
 
-        # Función para mostrar la matriz seleccionada
         def show_selected_matrix():
-            # Limpiar tabla actual
             for widget in table_frame.winfo_children():
                 widget.destroy()
 
             matrix_name = selected_matrix.get()
             matrix = matrices[matrix_name]
 
-            # Si no existe en matrix_vars, crear las variables
             if matrix_name not in matrix_vars:
                 matrix_vars[matrix_name] = []
                 for i in range(len(jugadores)):
@@ -1694,13 +1576,11 @@ class EvaluationTab(ttk.Frame):
                         row_vars.append(StringVar(value=matrix[i][j]))
                     matrix_vars[matrix_name].append(row_vars)
 
-            # Encabezados de columnas (criterios)
             header_font = ("Arial", 10, "bold")
             ttk.Label(table_frame, text="Jugador", font=header_font).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
             for j, criterio in enumerate(criterios):
                 ttk.Label(table_frame, text=criterio, font=header_font).grid(row=0, column=j+1, padx=5, pady=5, sticky=tk.W)
 
-            # Filas para cada jugador
             for i, jugador in enumerate(jugadores):
                 ttk.Label(table_frame, text=jugador, font=("Arial", 10)).grid(row=i+1, column=0, padx=5, pady=5, sticky=tk.W)
 
@@ -1709,24 +1589,19 @@ class EvaluationTab(ttk.Frame):
                                         values=self.valores_linguisticos, state="readonly", width=12, font=("Arial", 9))
                     combo.grid(row=i+1, column=j+1, padx=5, pady=5, sticky=tk.EW)
 
-                    # Establecer el valor actual
                     current_value = matrix_vars[matrix_name][i][j].get()
                     if current_value in self.valores_linguisticos:
                         combo.current(self.valores_linguisticos.index(current_value))
 
-            # Hacer columnas redimensionables
             table_frame.grid_columnconfigure(0, weight=1)
             for j in range(len(criterios)):
                 table_frame.grid_columnconfigure(j+1, weight=1)
 
-            # Actualizar el tamaño del canvas
             table_frame.update_idletasks()
             canvas.config(scrollregion=canvas.bbox("all"))
 
-        # Asociar el cambio de selección con la función
         matrix_selector.bind("<<ComboboxSelected>>", lambda e: show_selected_matrix())
 
-        # Botones
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(15, 0))
 
@@ -1737,7 +1612,6 @@ class EvaluationTab(ttk.Frame):
             review_window.destroy()
 
         def on_submit():
-            # Actualizar las matrices con los valores modificados
             modified_matrices = {}
             for matrix_name, vars_matrix in matrix_vars.items():
                 modified_matrix = []
@@ -1755,10 +1629,8 @@ class EvaluationTab(ttk.Frame):
         submit_button = ttk.Button(button_frame, text="Guardar Cambios", command=on_submit)
         submit_button.pack(side=tk.RIGHT, padx=5, expand=True)
 
-        # Mostrar la primera matriz
         show_selected_matrix()
 
-        # Esperar a que se cierre la ventana
         self.master.wait_window(review_window)
 
         if result_matrices[0] is not None:
@@ -1769,16 +1641,11 @@ class EvaluationTab(ttk.Frame):
             return matrices
 
 
-class DatabaseTab(ttk.Frame):
-    """
-    Pestaña para la consulta de la base de datos de jugadores.
-    Permite al usuario seleccionar un jugador y temporada para ver sus estadísticas.
-    """
-    def __init__(self, parent, colors):
-        super().__init__(parent)
-        self.colors = colors
-
-        self.positions = {
+class PestañaBaseDeDatos(ttk.Frame):
+    def __init__(self, padre, colores):
+        super().__init__(padre)
+        self.colores = colores
+        self.posiciones = {
             "GK": "Portero",
             "Defender": "Defensa",
             "Defensive-Midfielders": "Mediocentro defensivo",
@@ -1788,370 +1655,294 @@ class DatabaseTab(ttk.Frame):
             "Forwards": "Delantero"
         }
 
-        self.seasons = ["2022-2023", "2023-2024", "2024-2025"]
-        self.selected_season = StringVar(value=self.seasons[-1])
+        self.temporadas = ["2022-2023", "2023-2024", "2024-2025"]
+        self.temporada_seleccionada = StringVar(value=self.temporadas[-1])
+        self.ventana_tooltip = None
+        self.jugadores_comparar = []
+        self.info_jugador_actual = None
+        self.cargar_datos_jugadores()
+        self.crear_widgets()
 
-        self.tooltip_window = None
-
-        self.compare_players = []
-        self.current_player_info = None
-
-        self.load_player_data()
-
-        self.create_widgets()
-
-    def load_player_data(self):
-        """Carga los datos de jugadores desde la base de datos"""
+    def cargar_datos_jugadores(self):
         try:
-            # Cargar datos para la temporada seleccionada
-            season = self.selected_season.get()
-            self.df_players = cargar_estadisticas_jugadores(season)
-            if isinstance(self.df_players, str):  # Si hay un error
-                messagebox.showerror("Error", f"Error al cargar datos de jugadores: {self.df_players}")
-                self.df_players = None
-            elif self.df_players is not None and 'Player' in self.df_players.columns:
-                # Crear 'normalized_name' para búsquedas insensibles a mayúsculas
-                self.df_players['normalized_name'] = self.df_players['Player'].fillna('').astype(str).str.lower()
-
+            temporada = self.temporada_seleccionada.get()
+            self.df_jugadores = cargar_estadisticas_jugadores(temporada)
+            if isinstance(self.df_jugadores, str):
+                messagebox.showerror("Error", f"Error al cargar datos de jugadores: {self.df_jugadores}")
+                self.df_jugadores = None
+            elif self.df_jugadores is not None and 'Player' in self.df_jugadores.columns:
+                self.df_jugadores['nombre_normalizado'] = self.df_jugadores['Player'].fillna('').astype(str).str.lower()
         except Exception as e:
             messagebox.showerror("Error", f"Error al cargar datos de jugadores: {str(e)}")
-            self.df_players = None
+            self.df_jugadores = None
 
-    def create_widgets(self):
-        """Crea los widgets para la pestaña de consulta de base de datos"""
-        # Frame principal con dos columnas
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    def crear_widgets(self):
+        marco_principal = ttk.Frame(self)
+        marco_principal.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Frame izquierdo para selección y lista de jugadores
-        left_frame = ttk.Frame(main_frame)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,10)) # Espaciado aumentado
+        marco_izquierdo = ttk.Frame(marco_principal)
+        marco_izquierdo.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,10))
 
-        # Frame derecho para detalles y gráfico
-        right_frame = ttk.Frame(main_frame)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10,0)) # Espaciado aumentado
+        marco_derecho = ttk.Frame(marco_principal)
+        marco_derecho.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10,0))
 
-        # Frame para selección de posición y temporada
-        selection_frame = ttk.Frame(left_frame)
-        selection_frame.pack(fill=tk.X, padx=5, pady=5)
+        marco_seleccion = ttk.Frame(marco_izquierdo)
+        marco_seleccion.pack(fill=tk.X, padx=5, pady=5)
 
-        # Frame para selección de posición
-        position_frame = ttk.Frame(selection_frame)
-        position_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0,5))
+        marco_posicion = ttk.Frame(marco_seleccion)
+        marco_posicion.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0,5))
 
-        ttk.Label(position_frame, text="Posición:").pack(side=tk.LEFT, padx=(0,5))
-        self.position_var = StringVar()
-        self.position_combo = ttk.Combobox(position_frame, textvariable=self.position_var,
-                                          values=list(self.positions.values()), state="readonly", width=20)
-        self.position_combo.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        self.position_combo.bind("<<ComboboxSelected>>", self.on_position_selected)
+        ttk.Label(marco_posicion, text="Posición:").pack(side=tk.LEFT, padx=(0,5))
+        self.var_posicion = StringVar()
+        self.combo_posicion = ttk.Combobox(marco_posicion, textvariable=self.var_posicion,
+                                          values=list(self.posiciones.values()), state="readonly", width=20)
+        self.combo_posicion.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.combo_posicion.bind("<<ComboboxSelected>>", self.al_seleccionar_posicion)
 
-        # Frame para selección de temporada
-        season_frame = ttk.Frame(selection_frame)
-        season_frame.pack(side=tk.RIGHT, fill=tk.X, padx=(5,0))
+        marco_temporada = ttk.Frame(marco_seleccion)
+        marco_temporada.pack(side=tk.RIGHT, fill=tk.X, padx=(5,0))
+        ttk.Label(marco_temporada, text="Temporada:").pack(side=tk.LEFT, padx=(0,5))
 
-        ttk.Label(season_frame, text="Temporada:").pack(side=tk.LEFT, padx=(0,5))
-        self.season_combo = ttk.Combobox(season_frame, textvariable=self.selected_season,
-                                        values=self.seasons, state="readonly", width=8)
-        self.season_combo.pack(side=tk.LEFT, padx=5)
-        self.season_combo.bind("<<ComboboxSelected>>", self.on_season_selected)
+        self.combo_temporada = ttk.Combobox(marco_temporada, textvariable=self.temporada_seleccionada,
+                                        values=self.temporadas, state="readonly", width=8)
+        self.combo_temporada.pack(side=tk.LEFT, padx=5)
+        self.combo_temporada.bind("<<ComboboxSelected>>", self.al_seleccionar_temporada)
 
+        marco_busqueda = ttk.LabelFrame(marco_izquierdo, text="Buscar un Jugador")
+        marco_busqueda.pack(fill=tk.X, padx=5, pady=10, ipady=5)
 
-        # Frame para búsqueda de jugadores
-        search_frame_db = ttk.LabelFrame(left_frame, text="Buscar Jugador")
-        search_frame_db.pack(fill=tk.X, padx=5, pady=10, ipady=5)
+        self.var_busqueda = StringVar()
+        self.entrada_busqueda = ttk.Entry(marco_busqueda, textvariable=self.var_busqueda)
+        self.entrada_busqueda.pack(fill=tk.X, padx=10, pady=10)
+        self.entrada_busqueda.bind("<KeyRelease>", self.al_escribir_busqueda)
 
-        # Entrada para buscar jugador
-        self.search_var_db = StringVar() # Renombrar para evitar conflicto
-        self.search_entry_db = ttk.Entry(search_frame_db, textvariable=self.search_var_db) # Renombrar
-        self.search_entry_db.pack(fill=tk.X, padx=10, pady=10) # Padding dentro del LabelFrame
-        self.search_entry_db.bind("<KeyRelease>", self.on_search_key_release)
+        self.marco_lista_jugadores = ttk.LabelFrame(marco_izquierdo, text="Jugadores")
+        self.marco_lista_jugadores.pack(fill=tk.BOTH, expand=True, padx=5, pady=5, ipady=5)
+        marco_lista = ttk.Frame(self.marco_lista_jugadores)
+        marco_lista.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-
-        # Listbox para mostrar jugadores encontrados
-        self.players_frame = ttk.LabelFrame(left_frame, text="Jugadores")
-        self.players_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5, ipady=5)
-
-        # Listbox con scrollbar
-        players_list_frame = ttk.Frame(self.players_frame) # Frame interno para el listbox y scrollbar
-        players_list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5) # Padding dentro del LabelFrame
-
-        self.players_listbox_db = tk.Listbox(players_list_frame, # Renombrar para evitar conflicto
-                                         bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                         selectbackground=self.colors["accent_color"],
-                                         selectforeground=self.colors["fg_white"],
+        self.lista_jugadores = tk.Listbox(marco_lista,
+                                         bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                         selectbackground=self.colores["accent_color"],
+                                         selectforeground=self.colores["fg_white"],
                                          borderwidth=0, highlightthickness=0, font=("Arial",10))
-        self.players_listbox_db.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        players_scrollbar_db = ttk.Scrollbar(players_list_frame, command=self.players_listbox_db.yview) # Renombrar
-        players_scrollbar_db.pack(side=tk.RIGHT, fill=tk.Y)
-        self.players_listbox_db.config(yscrollcommand=players_scrollbar_db.set)
+        self.lista_jugadores.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        barra_lista = ttk.Scrollbar(marco_lista, command=self.lista_jugadores.yview)
+        barra_lista.pack(side=tk.RIGHT, fill=tk.Y)
+        self.lista_jugadores.config(yscrollcommand=barra_lista.set)
+        self.lista_jugadores.bind("<<ListboxSelect>>", self.al_seleccionar_jugador)
 
-        self.players_listbox_db.bind("<<ListboxSelect>>", self.on_player_selected)
+        self.marco_comparar = ttk.LabelFrame(marco_izquierdo, text="Comparar Jugadores")
+        self.marco_comparar.pack(fill=tk.X, padx=5, pady=10, ipady=5)
 
-
-        # Frame para comparación de jugadores
-        self.compare_frame = ttk.LabelFrame(left_frame, text="Comparar Jugadores")
-        self.compare_frame.pack(fill=tk.X, padx=5, pady=10, ipady=5)
-
-        # Listbox para jugadores a comparar
-        self.compare_listbox = tk.Listbox(self.compare_frame, height=3,
-                                          bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                          selectbackground=self.colors["accent_color"],
-                                          selectforeground=self.colors["fg_white"],
+        self.lista_comparar = tk.Listbox(self.marco_comparar, height=3,
+                                          bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                          selectbackground=self.colores["accent_color"],
+                                          selectforeground=self.colores["fg_white"],
                                           borderwidth=0, highlightthickness=0, font=("Arial",10))
-        self.compare_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=10) # Padding dentro del LabelFrame
+        self.lista_comparar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=10)
 
-        # Botones para añadir/quitar jugadores para comparar
-        compare_buttons_frame = ttk.Frame(self.compare_frame)
-        compare_buttons_frame.pack(side=tk.RIGHT, padx=10, pady=10) # Padding dentro del LabelFrame
+        marco_botones_comparar = ttk.Frame(self.marco_comparar)
+        marco_botones_comparar.pack(side=tk.RIGHT, padx=10, pady=10)
 
-        self.add_compare_btn = ttk.Button(compare_buttons_frame, text="Añadir",
-                                         command=self.add_player_to_compare)
-        self.add_compare_btn.pack(fill=tk.X, pady=2)
+        self.boton_añadir_comparar = ttk.Button(marco_botones_comparar, text="Añadir",
+                                         command=self.añadir_jugador_comparar)
+        self.boton_añadir_comparar.pack(fill=tk.X, pady=2)
 
-        self.remove_compare_btn = ttk.Button(compare_buttons_frame, text="Quitar",
-                                           command=self.remove_player_from_compare)
-        self.remove_compare_btn.pack(fill=tk.X, pady=2)
+        self.boton_quitar_comparar = ttk.Button(marco_botones_comparar, text="Quitar",
+                                           command=self.quitar_jugador_comparar)
+        self.boton_quitar_comparar.pack(fill=tk.X, pady=2)
 
+        self.marco_detalles = ttk.LabelFrame(marco_derecho, text="Estadísticas del Jugador")
+        self.marco_detalles.pack(fill=tk.BOTH, expand=True, padx=5, pady=5, ipady=5, ipadx=5)
 
-        # Frame para detalles del jugador
-        self.details_frame = ttk.LabelFrame(right_frame, text="Detalles del Jugador")
-        self.details_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5, ipady=5, ipadx=5) # ipady, ipadx para padding interno
+        self.texto_detalles = tk.Text(self.marco_detalles, wrap=tk.WORD, state=tk.DISABLED,
+                                   bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                   insertbackground=self.colores["fg_white"],
+                                   borderwidth=0, highlightthickness=0, font=("Arial", 10), relief=tk.FLAT, padx=5, pady=5)
+        self.texto_detalles.pack(fill=tk.BOTH, expand=True, side=tk.LEFT, padx=5, pady=5)
+        barra_detalles = ttk.Scrollbar(self.marco_detalles, command=self.texto_detalles.yview)
+        barra_detalles.pack(side=tk.RIGHT, fill=tk.Y)
+        self.texto_detalles.config(yscrollcommand=barra_detalles.set)
 
-        # Texto para mostrar detalles
-        self.details_text = tk.Text(self.details_frame, wrap=tk.WORD, state=tk.DISABLED,
-                                   bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                   insertbackground=self.colors["fg_white"], # Cursor más brillante
-                                   borderwidth=0, highlightthickness=0, font=("Arial", 10), relief=tk.FLAT, padx=5, pady=5) # Padding
-        self.details_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT, padx=5, pady=5) # Padding dentro del LabelFrame
+        self.marco_grafico = ttk.LabelFrame(marco_derecho, text="Gráfico de  Araña")
+        self.marco_grafico.pack(fill=tk.BOTH, expand=True, padx=5, pady=5, ipady=5, ipadx=5)
+        self.etiqueta_grafico = ttk.Label(self.marco_grafico, text="Seleccione al menos un jugador para ver en el gráfico", anchor="center")
+        self.etiqueta_grafico.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        details_scrollbar = ttk.Scrollbar(self.details_frame, command=self.details_text.yview)
-        details_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.details_text.config(yscrollcommand=details_scrollbar.set)
+    def al_seleccionar_posicion(self, evento):
+        nombre_posicion = self.var_posicion.get()
+        clave_posicion = None
 
-
-        # Frame para el gráfico de radar
-        self.chart_frame = ttk.LabelFrame(right_frame, text="Gráfico Comparativo")
-        self.chart_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5, ipady=5, ipadx=5) # ipady, ipadx para padding interno
-
-        # Placeholder para el gráfico
-        self.chart_placeholder = ttk.Label(self.chart_frame, text="Seleccione un jugador para ver el gráfico", anchor="center")
-        self.chart_placeholder.pack(fill=tk.BOTH, expand=True, padx=5, pady=5) # Padding dentro del LabelFrame
-
-    def on_position_selected(self, event):
-        """Maneja la selección de una posición"""
-        selected_position_name = self.position_var.get()
-
-        # Encontrar la clave de la posición seleccionada
-        selected_position_key = None
-        for key, value in self.positions.items():
-            if value == selected_position_name:
-                selected_position_key = key
+        for clave, valor in self.posiciones.items():
+            if valor == nombre_posicion:
+                clave_posicion = clave
                 break
 
-        if selected_position_key:
-            # Actualizar la lista de jugadores
-            self.update_players_list(selected_position_key)
+        if clave_posicion:
+            self.actualizar_lista_jugadores(clave_posicion)
 
-    def add_player_to_compare(self):
-        """Añade el jugador seleccionado a la lista de comparación"""
-        selection = self.players_listbox_db.curselection() # Usar el listbox correcto
-        if not selection:
+    def añadir_jugador_comparar(self):
+        seleccion = self.lista_jugadores.curselection()
+
+        if not seleccion:
             return
 
-        player_name = self.players_listbox_db.get(selection[0])
+        nombre_jugador = self.lista_jugadores.get(seleccion[0])
 
-        # Verificar si el jugador ya está en la lista de comparación (por nombre)
-        if player_name not in [self.compare_listbox.get(i) for i in range(self.compare_listbox.size())]:
-            # Añadir a la lista de comparación (máximo 3 jugadores para comparar + 1 principal)
-            if self.compare_listbox.size() < 3: # Limitar a 3 en la lista de comparación
-                self.compare_listbox.insert(tk.END, player_name)
+        if nombre_jugador not in [self.lista_comparar.get(i) for i in range(self.lista_comparar.size())]:
+            if self.lista_comparar.size() < 3:
+                self.lista_comparar.insert(tk.END, nombre_jugador)
+                if self.df_jugadores is not None:
+                    datos_jugador = self.df_jugadores[self.df_jugadores['Player'] == nombre_jugador]
+                    if not datos_jugador.empty:
+                        self.jugadores_comparar.append(datos_jugador.iloc[0])
+                        if self.info_jugador_actual is not None:
+                            self.actualizar_grafico_radar()
 
-                # Buscar datos del jugador
-                if self.df_players is not None:
-                    player_data_series = self.df_players[self.df_players['Player'] == player_name]
-                    if not player_data_series.empty:
-                        # Añadir el Series (o dict) a self.compare_players
-                        self.compare_players.append(player_data_series.iloc[0])
-
-                        # Actualizar el gráfico si hay un jugador principal seleccionado
-                        if self.current_player_info is not None:
-                            self.update_radar_chart()
             else:
-                messagebox.showinfo("Límite alcanzado", "Solo puede comparar hasta 3 jugadores adicionales.")
+                messagebox.showinfo("Límite alcanzado", "Solo se puede comparar hasta 3 jugadores.")
 
+    def quitar_jugador_comparar(self):
+        seleccion = self.lista_comparar.curselection()
 
-    def remove_player_from_compare(self):
-        """Elimina el jugador seleccionado de la lista de comparación"""
-        selection = self.compare_listbox.curselection()
-        if not selection:
+        if not seleccion:
             return
 
-        index = selection[0]
-        # player_name_to_remove = self.compare_listbox.get(index) # Obtener nombre si es necesario para lógica más compleja
-        self.compare_listbox.delete(index)
+        indice = seleccion[0]
+        self.lista_comparar.delete(indice)
 
-        # Eliminar de la lista de datos (self.compare_players)
-        if 0 <= index < len(self.compare_players):
-            self.compare_players.pop(index)
+        if 0 <= indice < len(self.jugadores_comparar):
+            self.jugadores_comparar.pop(indice)
+            if self.info_jugador_actual is not None:
+                self.actualizar_grafico_radar()
 
-            # Actualizar el gráfico
-            if self.current_player_info is not None:
-                self.update_radar_chart()
+    def al_seleccionar_temporada(self, evento):
+        nombre_posicion = self.var_posicion.get()
 
+        if nombre_posicion:
+            clave_posicion = None
 
-    def on_season_selected(self, event):
-        """Maneja la selección de una temporada"""
-        # Actualizar la lista de jugadores con la nueva temporada
-        selected_position_name = self.position_var.get()
-        if selected_position_name:
-            # Encontrar la clave de la posición seleccionada
-            selected_position_key = None
-            for key, value in self.positions.items():
-                if value == selected_position_name:
-                    selected_position_key = key
+            for clave, valor in self.posiciones.items():
+                if valor == nombre_posicion:
+                    clave_posicion = clave
                     break
 
-            if selected_position_key:
-                # Recargar los datos con la nueva temporada
-                self.load_player_data()
-                # Actualizar la lista de jugadores
-                self.update_players_list(selected_position_key)
-        else: # Si no hay posición seleccionada, aún recargar datos y limpiar lista
-            self.load_player_data()
-            self.players_listbox_db.delete(0, tk.END) # Usar el listbox correcto
+            if clave_posicion:
+                self.cargar_datos_jugadores()
+                self.actualizar_lista_jugadores(clave_posicion)
 
+        else:
+            self.cargar_datos_jugadores()
+            self.lista_jugadores.delete(0, tk.END)
 
-    def update_players_list(self, position_key):
-        """Actualiza la lista de jugadores según la posición seleccionada"""
-        if self.df_players is None:
+    def actualizar_lista_jugadores(self, clave_posicion):
+        if self.df_jugadores is None:
             return
 
-        # Limpiar la lista actual
-        self.players_listbox_db.delete(0, tk.END) # Usar el listbox correcto
+        self.lista_jugadores.delete(0, tk.END)
 
         try:
-            # Filtrar jugadores por posición
-            filtered_players = self.df_players[self.df_players['position_group'] == position_key]
+            jugadores_filtrados = self.df_jugadores[self.df_jugadores['position_group'] == clave_posicion]
 
-            # Ordenar por algún criterio relevante (por ejemplo, valor de mercado)
-            if 'market_value_in_eur' in filtered_players.columns:
-                filtered_players = filtered_players.sort_values(by='market_value_in_eur', ascending=False)
+            for _, fila_jugador in jugadores_filtrados.iterrows():
+                nombre_jugador = fila_jugador.get('Player', 'Desconocido')
+                self.lista_jugadores.insert(tk.END, nombre_jugador)
 
-            # Añadir jugadores a la listbox
-            for _, player_row in filtered_players.iterrows(): # Renombrar player a player_row
-                player_name = player_row.get('Player', 'Desconocido')
-                self.players_listbox_db.insert(tk.END, player_name) # Usar el listbox correcto
         except Exception as e:
             messagebox.showerror("Error", f"Error al actualizar la lista de jugadores: {str(e)}")
 
-    def on_search_key_release(self, event):
-        """Maneja la búsqueda de jugadores mientras se escribe"""
-        search_text = self.search_var_db.get().lower() # Usar la variable de búsqueda correcta
+    def al_escribir_busqueda(self, evento):
+        texto_busqueda = self.var_busqueda.get().lower()
 
-        if not search_text:
-            # Si no hay texto de búsqueda, restaurar la lista según la posición seleccionada
-            selected_position_name = self.position_var.get()
-            if selected_position_name: # Solo actualizar si hay una posición seleccionada
-                selected_position_key = next((key for key, value in self.positions.items() if value == selected_position_name), None)
-                if selected_position_key:
-                    self.update_players_list(selected_position_key)
-            else: # Si no hay posición Y no hay búsqueda, limpiar la lista
-                 self.players_listbox_db.delete(0, tk.END) # Usar el listbox correcto
+        if not texto_busqueda:
+            nombre_posicion = self.var_posicion.get()
+
+            if nombre_posicion:
+                clave_posicion = next((clave for clave, valor in self.posiciones.items() if valor == nombre_posicion), None)
+
+                if clave_posicion:
+                    self.actualizar_lista_jugadores(clave_posicion)
+
+            else:
+                 self.lista_jugadores.delete(0, tk.END)
             return
 
-        # Limpiar la lista actual
-        self.players_listbox_db.delete(0, tk.END) # Usar el listbox correcto
+        self.lista_jugadores.delete(0, tk.END)
 
-        if self.df_players is None:
+        if self.df_jugadores is None:
             return
 
         try:
-            # Filtrar jugadores que coincidan con la búsqueda (usando 'normalized_name')
-            mask = self.df_players['normalized_name'].astype(str).str.contains(search_text, na=False)
-            filtered_players = self.df_players[mask]
+            mascara = self.df_jugadores['nombre_normalizado'].astype(str).str.contains(texto_busqueda, na=False)
+            jugadores_filtrados = self.df_jugadores[mascara]
 
+            for _, fila_jugador in jugadores_filtrados.iterrows():
+                nombre_jugador = fila_jugador.get('Player', 'Desconocido')
+                self.lista_jugadores.insert(tk.END, nombre_jugador)
 
-            # Añadir jugadores a la listbox
-            for _, player_row in filtered_players.iterrows(): # Renombrar player a player_row
-                player_name = player_row.get('Player', 'Desconocido')
-                self.players_listbox_db.insert(tk.END, player_name) # Usar el listbox correcto
         except Exception as e:
             messagebox.showerror("Error", f"Error al buscar jugadores: {str(e)}")
 
-    def on_player_selected(self, event):
-        """Maneja la selección de un jugador de la lista"""
-        selection = self.players_listbox_db.curselection() # Usar el listbox correcto
-        if not selection:
+    def al_seleccionar_jugador(self, evento):
+        seleccion = self.lista_jugadores.curselection()
+
+        if not seleccion:
             return
 
-        player_name = self.players_listbox_db.get(selection[0])
+        nombre_jugador = self.lista_jugadores.get(seleccion[0])
 
-        if self.df_players is None:
+        if self.df_jugadores is None:
             return
 
         try:
-            # Buscar el jugador en el DataFrame
-            player_data_series = self.df_players[self.df_players['Player'] == player_name] # Renombrar player_data a player_data_series
+            datos_jugador = self.df_jugadores[self.df_jugadores['Player'] == nombre_jugador]
 
-            if player_data_series.empty:
+            if datos_jugador.empty:
                 return
 
-            # Obtener los datos del jugador (es un Series)
-            self.current_player_info = player_data_series.iloc[0] # Guardar como current_player_info
+            self.info_jugador_actual = datos_jugador.iloc[0]
+            self.mostrar_detalles_jugador(self.info_jugador_actual)
 
-            # Mostrar los detalles del jugador
-            self.show_player_details(self.current_player_info)
         except Exception as e:
-            messagebox.showerror("Error", f"Error al mostrar detalles del jugador: {str(e)}")
+            messagebox.showerror("Error", f"Error al mostrar estadísticas del jugador: {str(e)}")
 
-    def show_player_details(self, player_info_series): # Renombrar player_info a player_info_series
-        """Muestra los detalles del jugador seleccionado"""
-        # Guardar referencia al jugador actual para comparaciones
-        self.current_player_info = player_info_series # Ya se hace en on_player_selected, pero redundancia no daña
+    def mostrar_detalles_jugador(self, serie_info_jugador):
+        self.info_jugador_actual = serie_info_jugador
+        self.texto_detalles.config(state=tk.NORMAL)
+        self.texto_detalles.delete("1.0", tk.END)
 
-        # Habilitar el texto para edición
-        self.details_text.config(state=tk.NORMAL)
+        def añadir_detalle(etiqueta, valor, negrita=False, es_puntuacion=False):
+            if negrita:
+                self.texto_detalles.insert(tk.END, etiqueta + ": ", ("negrita_detalle",))
 
-        # Limpiar el texto actual
-        self.details_text.delete("1.0", tk.END)
-
-        # Función auxiliar para añadir detalles con estilo
-        def add_detail(label, value, bold_label=False, is_score=False):
-            if bold_label:
-                self.details_text.insert(tk.END, label + ": ", ("bold_detail",))
             else:
-                 self.details_text.insert(tk.END, label + ": ")
+                 self.texto_detalles.insert(tk.END, etiqueta + ": ")
 
-            if is_score: # Formato especial para la puntuación
-                self.details_text.insert(tk.END, f"{value:.2f}/10\n", ("score_detail",))
+            if es_puntuacion:
+                self.texto_detalles.insert(tk.END, f"{valor:.2f}/10\n", ("puntuacion_detalle",))
+
             else:
-                self.details_text.insert(tk.END, f"{value}\n")
+                self.texto_detalles.insert(tk.END, f"{valor}\n")
 
-        # Definir tags para el estilo del texto
-        self.details_text.tag_configure("bold_detail", font=("Arial", 10, "bold"), foreground=self.colors["fg_white"])
-        self.details_text.tag_configure("category_header", font=("Arial", 11, "bold"), foreground=self.colors["accent_color"], spacing1=5, spacing3=5) # spacing1 arriba, spacing3 abajo
-        self.details_text.tag_configure("stat_label", font=("Arial", 9), foreground=self.colors["fg_light"]) # Para nombres de estadísticas
-        self.details_text.tag_configure("stat_value", font=("Arial", 9, "bold"), foreground=self.colors["fg_white"]) # Para valores de estadísticas
-        self.details_text.tag_configure("score_detail", font=("Arial", 10, "bold"), foreground=self.colors["green_accent"])
+        self.texto_detalles.tag_configure("negrita_detalle", font=("Arial", 10, "bold"), foreground=self.colores["fg_white"])
+        self.texto_detalles.tag_configure("categoria_encabezado", font=("Arial", 11, "bold"), foreground=self.colores["accent_color"], spacing1=5, spacing3=5)
+        self.texto_detalles.tag_configure("etiqueta_estadistica", font=("Arial", 9), foreground=self.colores["fg_light"])
+        self.texto_detalles.tag_configure("valor_estadistica", font=("Arial", 9, "bold"), foreground=self.colores["fg_white"])
+        self.texto_detalles.tag_configure("puntuacion_detalle", font=("Arial", 10, "bold"), foreground=self.colores["green_accent"])
 
+        añadir_detalle("Nombre", serie_info_jugador.get('Player', 'Desconocido'), negrita=True)
+        añadir_detalle("Posición", serie_info_jugador.get('position_group', 'Desconocida'))
+        añadir_detalle("Equipo", serie_info_jugador.get('Squad', 'Desconocido'))
+        añadir_detalle("Liga", serie_info_jugador.get('Comp', 'Desconocida'))
+        añadir_detalle("Temporada", serie_info_jugador.get('Season', 'Desconocida'))
 
-        add_detail("Nombre", player_info_series.get('Player', 'Desconocido'), bold_label=True)
-        add_detail("Posición", player_info_series.get('position_group', 'Desconocida'))
-        add_detail("Equipo", player_info_series.get('Squad', 'Desconocido'))
-        add_detail("Liga", player_info_series.get('Comp', 'Desconocida'))
-        add_detail("Temporada", player_info_series.get('Season', 'Desconocida'))
+        puntuacion = calcular_ponderacion_estadisticas(serie_info_jugador)
+        puntuacion_normalizada = normalizar_puntuacion_individual(puntuacion, min_teorico=0, max_teorico=100, escala=10)
+        añadir_detalle("Puntuación", round(puntuacion_normalizada, 2), es_puntuacion=True)
 
-
-        if 'market_value_in_eur' in player_info_series and pd.notna(player_info_series['market_value_in_eur']):
-            value_in_millions = player_info_series['market_value_in_eur'] / 1000000
-            add_detail("Valor de mercado", f"{value_in_millions:.2f} millones €")
-
-        puntuacion = calcular_ponderacion_estadisticas(player_info_series)/10
-        add_detail("Puntuación", puntuacion, is_score=True)
-
-        self.details_text.insert(tk.END, "\nEstadísticas completas:\n", ("category_header",))
+        self.texto_detalles.insert(tk.END, "\nEstadísticas completas:\n", ("categoria_encabezado",))
 
         categorias = {
             "STANDARD": ["Player", "Nation", "Pos", "Squad", "Age", "Born", "90s", "Comp", "Season"],
@@ -2165,155 +1956,128 @@ class DatabaseTab(ttk.Frame):
         }
 
         try:
-            current_script_dir = os.path.dirname(__file__)
-            project_root_dir = os.path.abspath(os.path.join(current_script_dir, "..", ".."))
-            explanation_file_path = os.path.join(project_root_dir, "data", "fbref_stats_explained.json")
+            dir_script = os.path.dirname(__file__)
+            dir_raiz = os.path.abspath(os.path.join(dir_script, "..", ".."))
+            ruta_explicacion = os.path.join(dir_raiz, "data", "fbref_stats_explained.json")
 
-            with open(explanation_file_path, 'r', encoding='utf-8') as f:
-                self.explicaciones_stats = json.load(f)
+            with open(ruta_explicacion, 'r', encoding='utf-8') as f:
+                self.explicaciones_estadisticas = json.load(f)
+
         except FileNotFoundError:
-            self.explicaciones_stats = {}
-            print(f"Advertencia: No se pudo cargar el archivo de explicaciones: {explanation_file_path}")
+            self.explicaciones_estadisticas = {}
+
         except json.JSONDecodeError:
-            self.explicaciones_stats = {}
-            print(f"Advertencia: Error al decodificar el archivo JSON de explicaciones: {explanation_file_path}")
-        except Exception as e:
-            self.explicaciones_stats = {}
-            print(f"Error inesperado al cargar explicaciones: {e} desde {explanation_file_path if 'explanation_file_path' in locals() else 'ruta desconocida'}")
+            self.explicaciones_estadisticas = {}
 
-            with open(explanation_file_path, 'r', encoding='utf-8') as f:
-                self.explicaciones_stats = json.load(f)
         except Exception as e:
-            self.explicaciones_stats = {}
-            print(f"Error al cargar explicaciones: {e} desde {explanation_file_path if 'explanation_file_path' in locals() else 'ruta desconocida'}")
+            self.explicaciones_estadisticas = {}
 
-        for categoria, stats_list in categorias.items(): # Renombrar stats a stats_list
-            self.details_text.insert(tk.END, f"\n{categoria.upper()}:\n", ("category_header",))
-            for stat_key in stats_list: # Renombrar stat a stat_key
-                if stat_key in player_info_series and not pd.isna(player_info_series[stat_key]):
-                    valor = player_info_series[stat_key]
-                    # Formatear valores numéricos
+        for categoria, lista_estadisticas in categorias.items():
+            self.texto_detalles.insert(tk.END, f"\n{categoria.upper()}:\n", ("categoria_encabezado",))
+
+            for clave_estadistica in lista_estadisticas:
+                if clave_estadistica in serie_info_jugador and not pd.isna(serie_info_jugador[clave_estadistica]):
+                    valor = serie_info_jugador[clave_estadistica]
+
                     if isinstance(valor, (int, float)):
-                        if stat_key.endswith('%'):
+                        if clave_estadistica.endswith('%'):
                             valor_str = f"{valor:.1f}%"
-                        else: # Otros números, formatear a 2 decimales si es float
+
+                        else:
                             valor_str = f"{valor:.2f}" if isinstance(valor, float) else f"{valor}"
+
                     else:
                         valor_str = str(valor)
 
-                    safe_stat_key = re.sub(r'\W+', '_', stat_key)
-                    tag_name = f"stat_{safe_stat_key}"
+                    clave_segura = re.sub(r'\W+', '_', clave_estadistica)
+                    nombre_tag = f"estadistica_{clave_segura}"
+                    self.texto_detalles.insert(tk.END, f"  • {clave_estadistica}: ", (nombre_tag, "etiqueta_estadistica"))
+                    self.texto_detalles.insert(tk.END, f"{valor_str}\n", ("valor_estadistica",))
 
-                    self.details_text.insert(tk.END, f"  • {stat_key}: ", (tag_name, "stat_label")) # Usar "stat_label"
-                    self.details_text.insert(tk.END, f"{valor_str}\n", ("stat_value",)) # Usar "stat_value"
+                    if clave_estadistica in self.explicaciones_estadisticas:
+                        self.texto_detalles.tag_bind(nombre_tag, "<Enter>",
+                                                lambda evento, s=clave_estadistica: self.mostrar_tooltip_estadistica(evento, s))
+                        self.texto_detalles.tag_bind(nombre_tag, "<Leave>", self.ocultar_tooltip_estadistica)
 
-                    if stat_key in self.explicaciones_stats:
-                        self.details_text.tag_bind(tag_name, "<Enter>",
-                                                lambda event, s=stat_key: self.show_stat_tooltip(event, s))
-                        self.details_text.tag_bind(tag_name, "<Leave>", self.hide_stat_tooltip)
+        self.texto_detalles.config(state=tk.DISABLED)
+        self.actualizar_grafico_radar()
 
-        self.details_text.config(state=tk.DISABLED)
+    def mostrar_tooltip_estadistica(self, evento, clave_estadistica_tooltip):
+        self.ocultar_tooltip_estadistica(None)
 
-        self.update_radar_chart()
+        if clave_estadistica_tooltip in self.explicaciones_estadisticas:
+            explicacion = self.explicaciones_estadisticas[clave_estadistica_tooltip]
+            bbox = self.texto_detalles.bbox(tk.CURRENT)
 
-
-    def show_stat_tooltip(self, event, stat_key_tooltip): # Renombrar stat a stat_key_tooltip
-        """Muestra un tooltip con la explicación de la estadística"""
-        # Destruir tooltip existente si hay uno
-        self.hide_stat_tooltip(None)
-
-        # Obtener la explicación de la estadística
-        if stat_key_tooltip in self.explicaciones_stats:
-            explicacion = self.explicaciones_stats[stat_key_tooltip]
-
-            # Crear ventana para el tooltip
-            # Obtener coordenadas relativas al widget Text
-            bbox = self.details_text.bbox(tk.CURRENT)
-            if not bbox: return # No hay nada bajo el cursor
-
+            if not bbox: return
             x_rel, y_rel, _, _ = bbox
-            # Convertir a coordenadas de pantalla
-            x_root = self.details_text.winfo_rootx()
-            y_root = self.details_text.winfo_rooty()
+            x_root = self.texto_detalles.winfo_rootx()
+            y_root = self.texto_detalles.winfo_rooty()
 
+            self.ventana_tooltip = tk.Toplevel(self.master)
+            self.ventana_tooltip.wm_overrideredirect(True)
 
-            self.tooltip_window = tk.Toplevel(self.master) # Asegurar que es hijo de la ventana principal
-            self.tooltip_window.wm_overrideredirect(True) # Sin decoraciones de ventana
-            # Posicionar tooltip cuidadosamente, asegurar que está en pantalla
-            final_x = x_root + x_rel + 20 # Offset del cursor
+            final_x = x_root + x_rel + 20
             final_y = y_root + y_rel + 20
 
+            etiqueta_dummy = tk.Label(self.ventana_tooltip, text=explicacion, wraplength=300, font=("Arial", 9))
+            etiqueta_dummy.pack()
 
-            # Crear una etiqueta temporal para obtener dimensiones aproximadas del tooltip
-            # Esto ayuda a posicionarlo para que no se salga de la pantalla
-            dummy_label = tk.Label(self.tooltip_window, text=explicacion, wraplength=300, font=("Arial", 9))
-            dummy_label.pack()
-            self.tooltip_window.update_idletasks() # Procesar geometría
-            tip_width = self.tooltip_window.winfo_width()
-            tip_height = self.tooltip_window.winfo_height()
-            dummy_label.destroy() # Eliminar la etiqueta temporal
+            self.ventana_tooltip.update_idletasks()
 
+            ancho_tip = self.ventana_tooltip.winfo_width()
+            alto_tip = self.ventana_tooltip.winfo_height()
 
-            # Ajustar posición si se sale de la pantalla
-            screen_width = self.master.winfo_screenwidth()
-            screen_height = self.master.winfo_screenheight()
+            etiqueta_dummy.destroy()
 
-            if final_x + tip_width > screen_width:
-                final_x = screen_width - tip_width - 10 # Mover a la izquierda
-            if final_x < 0 : final_x = 10 # Evitar que se salga por la izquierda
+            ancho_pantalla = self.master.winfo_screenwidth()
+            alto_pantalla = self.master.winfo_screenheight()
 
-            if final_y + tip_height > screen_height:
-                final_y = y_root + y_rel - tip_height - 10 # Mostrar arriba si está muy abajo
-            if final_y < 0 : final_y = 10 # Evitar que se salga por arriba
+            if final_x + ancho_tip > ancho_pantalla:
+                final_x = ancho_pantalla - ancho_tip - 10
 
+            if final_x < 0 : final_x = 10
 
-            self.tooltip_window.wm_geometry(f"+{int(final_x)}+{int(final_y)}") # Usar int para geometría
-            self.tooltip_window.configure(background=self.colors["tooltip_bg"])
+            if final_y + alto_tip > alto_pantalla:
+                final_y = y_root + y_rel - alto_tip - 10
 
+            if final_y < 0 : final_y = 10
 
-            # Crear etiqueta con la explicación
-            label = tk.Label(self.tooltip_window, text=explicacion, justify=tk.LEFT,
-                           background=self.colors["tooltip_bg"], foreground=self.colors["fg_light"],
-                           relief=tk.SOLID, # Usar SOLID para el borde principal
-                           borderwidth=1, # Grosor del borde principal
+            self.ventana_tooltip.wm_geometry(f"+{int(final_x)}+{int(final_y)}")
+            self.ventana_tooltip.configure(background=self.colores["tooltip_bg"])
+
+            etiqueta = tk.Label(self.ventana_tooltip, text=explicacion, justify=tk.LEFT,
+                           background=self.colores["tooltip_bg"], foreground=self.colores["fg_light"],
+                           relief=tk.SOLID,
+                           borderwidth=1,
                            wraplength=300, font=("Arial", 9),
-                           # Usar highlightbackground/color para el borde en algunos temas de Tk
-                           highlightbackground=self.colors["tooltip_border"],
-                           highlightcolor=self.colors["tooltip_border"],
-                           highlightthickness=1, # Esto podría ser el borde que se ve
+                           highlightbackground=self.colores["tooltip_border"],
+                           highlightcolor=self.colores["tooltip_border"],
+                           highlightthickness=1,
                            padx=5, pady=5)
-            label.pack()
+            etiqueta.pack()
 
+    def ocultar_tooltip_estadistica(self, evento):
+        if self.ventana_tooltip:
+            self.ventana_tooltip.destroy()
+            self.ventana_tooltip = None
 
-    def hide_stat_tooltip(self, event):
-        """Oculta el tooltip"""
-        if self.tooltip_window:
-            self.tooltip_window.destroy()
-            self.tooltip_window = None
-
-    def update_radar_chart(self):
-        """Actualiza el gráfico de radar para comparar jugadores"""
-        # Limpiar el frame del gráfico, excepto el placeholder si existe
-        for widget in self.chart_frame.winfo_children():
-            if widget != self.chart_placeholder:
+    def actualizar_grafico_radar(self):
+        for widget in self.marco_grafico.winfo_children():
+            if widget != self.etiqueta_grafico:
                 widget.destroy()
 
-
-        # Si no hay jugador seleccionado, mostrar mensaje y asegurarse que el placeholder está visible
-        if self.current_player_info is None:
-            if not self.chart_placeholder.winfo_ismapped(): # Mostrar placeholder si no está visible
-                 self.chart_placeholder.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        if self.info_jugador_actual is None:
+            if not self.etiqueta_grafico.winfo_ismapped():
+                 self.etiqueta_grafico.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             return
 
-        # Ocultar placeholder si vamos a dibujar un gráfico
-        if self.chart_placeholder.winfo_ismapped():
-            self.chart_placeholder.pack_forget()
+        if self.etiqueta_grafico.winfo_ismapped():
+            self.etiqueta_grafico.pack_forget()
 
+        posicion = self.info_jugador_actual.get('position_group', '')
 
-        # Definir estadísticas para el gráfico según la posición
-        position = self.current_player_info.get('position_group', '')
-
-        stats_by_position = {
+        estadisticas_por_posicion = {
             "GK": {"Save%": "% Paradas", "CS%": "% Porterías 0", "PSxG/SoT": "Calidad Paradas", "Stp%": "% Salidas Exitosas", "Total - Cmp%": "Precisión Pases", "Long - Cmp%": "Prec. Pases Largos"},
             "Defender": {"Tkl%": "% Entradas Exitosas", "Won%": "% Duelos Aéreos Gan.", "Total - Cmp%": "Precisión Pases", "Long - Cmp%": "Prec. Pases Largos", "Succ%": "% Regates Exitosos", "Blocks": "Bloqueos Tot."},
             "Defensive-Midfielders": {"Tkl%": "% Entradas Exitosas", "Total - Cmp%": "Precisión Pases", "Won%": "% Duelos Aéreos Gan.", "Succ%": "% Regates Exitosos", "Medium - Cmp%": "Prec. Pases Medios", "Int_y": "Intercepciones"},
@@ -2323,120 +2087,109 @@ class DatabaseTab(ttk.Frame):
             "Forwards": {"G/Sh": "Efic. Tiro", "SoT%": "% Tiros Puerta", "G/SoT": "Goles/Tiro Puerta", "Succ%": "% Regates Exitosos", "Won%": "% Duelos Aéreos Gan.", "npxG": "xG (sin penaltis)"}
         }
 
-        stats_to_use = stats_by_position.get(position, {
+        estadisticas_usar = estadisticas_por_posicion.get(posicion, {
             "SoT%": "% Tiros Puerta", "G/Sh": "Efic. Tiro", "Total - Cmp%": "Precisión Pases",
             "Succ%": "% Regates Exitosos", "Won%": "% Duelos Aéreos Gan.", "Tkl%": "% Entradas Exitosas"
         })
 
-        stats_keys = list(stats_to_use.keys())
-        stats_labels = list(stats_to_use.values())
+        claves_estadisticas = list(estadisticas_usar.keys())
+        etiquetas_estadisticas = list(estadisticas_usar.values())
 
-        all_players_data_for_chart = [self.current_player_info] + self.compare_players
-        all_values_for_norm = {stat: [] for stat in stats_keys} # Renombrar all_values a all_values_for_norm
+        todos_jugadores_grafico = [self.info_jugador_actual] + self.jugadores_comparar
+        todos_valores_norm = {estad: [] for estad in claves_estadisticas}
 
-        for player_data_series in all_players_data_for_chart: # Renombrar player a player_data_series
-            for stat_key_chart in stats_keys: # Renombrar stat a stat_key_chart
-                if stat_key_chart in player_data_series and pd.notna(player_data_series[stat_key_chart]):
+        for serie_jugador in todos_jugadores_grafico:
+            for clave_estadistica_grafico in claves_estadisticas:
+                if clave_estadistica_grafico in serie_jugador and pd.notna(serie_jugador[clave_estadistica_grafico]):
                     try:
-                        all_values_for_norm[stat_key_chart].append(float(player_data_series[stat_key_chart]))
+                        todos_valores_norm[clave_estadistica_grafico].append(float(serie_jugador[clave_estadistica_grafico]))
                     except ValueError:
-                        all_values_for_norm[stat_key_chart].append(0.0) # Si no se puede convertir a float
-                        print(f"Advertencia: No se pudo convertir {player_data_series[stat_key_chart]} a float para {stat_key_chart}")
+                        todos_valores_norm[clave_estadistica_grafico].append(0.0)
+
                 else:
-                    all_values_for_norm[stat_key_chart].append(0.0) # Valor por defecto si falta o es NaN
+                    todos_valores_norm[clave_estadistica_grafico].append(0.0)
 
+        figura = Figure(figsize=(6, 5.5), facecolor=self.colores["bg_dark_widget"], dpi=100)
+        eje = figura.add_subplot(111, polar=True, facecolor=self.colores["bg_dark_entry"])
 
-        # Crear figura
-        fig = Figure(figsize=(6, 5.5), facecolor=self.colors["bg_dark_widget"], dpi=100) # Tamaño y dpi ajustados
-        ax = fig.add_subplot(111, polar=True, facecolor=self.colors["bg_dark_entry"]) # Color de fondo del área polar
+        N = len(claves_estadisticas)
+        angulos = [n / float(N) * 2 * np.pi for n in range(N)]
+        angulos += angulos[:1]
 
+        eje.set_xticks(angulos[:-1])
+        eje.set_xticklabels(etiquetas_estadisticas, color=self.colores["fg_light"], fontdict={'fontsize': 9})
+        eje.tick_params(axis='x', pad=10)
+        eje.set_ylim(0, 100)
+        eje.set_yticks([20, 40, 60, 80, 100])
+        eje.set_yticklabels([f"{val}%" for val in [20, 40, 60, 80, 100]], color=self.colores["fg_light"], fontsize=8)
+        eje.grid(True, color=self.colores["fg_light"], linestyle='--', linewidth=0.5, alpha=0.3)
+        eje.spines['polar'].set_color(self.colores["fg_light"])
+        eje.spines['polar'].set_linewidth(0.5)
 
-        # Número de variables
-        N = len(stats_keys)
+        colores_grafico = [self.colores["accent_color"]] + ['#FFCA28', '#66BB6A', '#EF5350'][:len(self.jugadores_comparar)]
 
-        # Ángulos para el gráfico (en radianes)
-        angles = [n / float(N) * 2 * np.pi for n in range(N)]
-        angles += angles[:1]  # Cerrar el polígono
+        for i, serie_jugador in enumerate(todos_jugadores_grafico):
+            if i > 3 : break
 
-        # Configurar el gráfico
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(stats_labels, color=self.colors["fg_light"], fontdict={'fontsize': 9}) # Fuente más pequeña para etiquetas
-        ax.tick_params(axis='x', pad=10) # Separar etiquetas del eje
+            valores_normalizados = []
 
-        ax.set_ylim(0, 100) # Rango de normalización
-        ax.set_yticks([20, 40, 60, 80, 100])
-        ax.set_yticklabels([f"{val}%" for val in [20, 40, 60, 80, 100]], color=self.colors["fg_light"], fontsize=8) # Etiquetas de Y más pequeñas
-        ax.grid(True, color=self.colors["fg_light"], linestyle='--', linewidth=0.5, alpha=0.3) # Rejilla más sutil
-        ax.spines['polar'].set_color(self.colors["fg_light"]) # Color del círculo exterior
-        ax.spines['polar'].set_linewidth(0.5)
+            for clave_estadistica_grafico in claves_estadisticas:
+                valor = 0.0
 
-
-        # Añadir jugadores
-        # Colores para los gráficos de radar (principal + comparaciones)
-        plot_colors = [self.colors["accent_color"]] + ['#FFCA28', '#66BB6A', '#EF5350'][:len(self.compare_players)]
-
-
-        for i, player_data_series in enumerate(all_players_data_for_chart): # Iterar sobre todos los jugadores para el gráfico
-            if i > 3 : break # Limitar a principal + 3 comparaciones (total 4 líneas)
-
-            player_values_normalized = [] # Renombrar main_player_values a player_values_normalized
-            for stat_key_chart in stats_keys: # Renombrar stat a stat_key_chart
-                value = 0.0
-                if stat_key_chart in player_data_series and pd.notna(player_data_series[stat_key_chart]):
+                if clave_estadistica_grafico in serie_jugador and pd.notna(serie_jugador[clave_estadistica_grafico]):
                     try:
-                        value = float(player_data_series[stat_key_chart])
+                        valor = float(serie_jugador[clave_estadistica_grafico])
+
                     except ValueError:
-                        pass # value permanece 0.0
+                        pass
 
-                # Lógica de normalización (puede necesitar ajuste específico por estadística)
-                # Aquí asumimos que los % ya están en escala 0-100. Otros se normalizan relativos al máximo.
-                normalized_value = 0.0
-                if stat_key_chart.endswith('%'): # Si es un porcentaje, usar directamente (asumiendo 0-100)
-                    normalized_value = value
-                elif stat_key_chart in ["G/Sh", "G/SoT", "PSxG/SoT"]: # Ratios que pueden ser < 1 o > 1
-                    # Escalar estos ratios. Ej: si G/Sh máx esperado es 0.3, entonces (value / 0.3) * 100
-                    # Esto es una simplificación, idealmente se usarían percentiles o una escala fija.
-                    # Para este ejemplo, multiplicamos por 100 y limitamos a 100.
-                    normalized_value = min(100, value * 100 if stat_key_chart in ["G/Sh", "G/SoT"] else value + 50 if stat_key_chart == "PSxG/SoT" else value) # PSxG/SoT puede ser negativo
-                else: # Para valores absolutos, normalizar respecto al máximo del grupo
-                    max_val_for_stat = max(all_values_for_norm[stat_key_chart]) if all_values_for_norm[stat_key_chart] else 1
-                    normalized_value = (value / max_val_for_stat) * 100 if max_val_for_stat > 0 else 0
+                valor_normalizado = 0.0
 
-                player_values_normalized.append(min(100, max(0, normalized_value))) # Asegurar que está entre 0 y 100
+                if clave_estadistica_grafico.endswith('%'):
+                    valor_normalizado = valor
 
+                elif clave_estadistica_grafico in ["G/Sh", "G/SoT", "PSxG/SoT"]:
+                    valor_normalizado = min(100, valor * 100 if clave_estadistica_grafico in ["G/Sh", "G/SoT"] else valor + 50 if clave_estadistica_grafico == "PSxG/SoT" else valor)
 
-            player_values_normalized += player_values_normalized[:1]  # Cerrar el polígono
-            ax.plot(angles, player_values_normalized, linewidth=1.5, linestyle='solid', label=player_data_series['Player'], color=plot_colors[i % len(plot_colors)]) # Usar módulo para colores si hay más jugadores que colores
-            ax.fill(angles, player_values_normalized, alpha=0.25, color=plot_colors[i % len(plot_colors)])
+                else:
+                    max_valor = max(todos_valores_norm[clave_estadistica_grafico]) if todos_valores_norm[clave_estadistica_grafico] else 1
+                    valor_normalizado = (valor / max_valor) * 100 if max_valor > 0 else 0
 
+                valores_normalizados.append(min(100, max(0, valor_normalizado)))
 
-        ax.set_title("Comparación de Jugadores (Valores Normalizados %)", color=self.colors["fg_light"], fontsize=12, pad=20) # Padding aumentado para el título
+            valores_normalizados += valores_normalizados[:1]
 
-        # Leyenda debajo del gráfico
-        legend = ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=min(len(all_players_data_for_chart), 4), frameon=False)
-        for text in legend.get_texts():
-            text.set_color(self.colors["fg_light"])
-            text.set_fontsize(9) # Fuente de leyenda más pequeña
+            eje.plot(angulos, valores_normalizados, linewidth=1.5, linestyle='solid', label=serie_jugador['Player'], color=colores_grafico[i % len(colores_grafico)])
+            eje.fill(angulos, valores_normalizados, alpha=0.25, color=colores_grafico[i % len(colores_grafico)])
 
-        fig.tight_layout(pad=1.5) # Ajustar layout para evitar superposiciones
+        leyenda = eje.legend(loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=min(len(todos_jugadores_grafico), 4), frameon=False)
 
-        canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
+        for texto in leyenda.get_texts():
+            texto.set_color(self.colores["fg_light"])
+            texto.set_fontsize(9)
+
+        figura.tight_layout(pad=1.5)
+
+        self.figura = figura
+
+        canvas = FigureCanvasTkAgg(figura, master=self.marco_grafico)
         canvas.draw()
-        canvas_widget = canvas.get_tk_widget()
-        canvas_widget.configure(background=self.colors["bg_dark_widget"]) # Fondo del widget canvas
-        canvas_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        widget_canvas = canvas.get_tk_widget()
+        widget_canvas.configure(background=self.colores["bg_dark_widget"])
+        widget_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        if hasattr(self, "boton_exportar_grafico") and self.boton_exportar_grafico.winfo_exists():
+            self.boton_exportar_grafico.pack_forget()
+        else:
+            self.boton_exportar_grafico = ttk.Button(self.marco_grafico, text="Exportar Gráfico",
+                                                     command=self.exportar_grafico)
+        self.boton_exportar_grafico.pack(side=tk.BOTTOM, pady=5)
 
 
-        # Estilo de la barra de herramientas
-        toolbar_frame = ttk.Frame(self.chart_frame) # Usar un ttk.Frame para la barra de herramientas
-        toolbar_frame.pack(fill=tk.X)
-        toolbar = NavigationToolbar2Tk(canvas, toolbar_frame)
-        toolbar.update()
-        toolbar.configure(background=self.colors["bg_dark_widget"]) # Fondo de la barra de herramientas
-        # Estilizar los botones de la barra de herramientas (puede ser complicado debido a cómo se crean internamente)
-        for child in toolbar.winfo_children():
-            child.configure(background=self.colors["bg_dark_widget"]) # Fondo para todos los hijos
-            if isinstance(child, (tk.Button, ttk.Button)): # Estilizar botones tk y ttk
-                 if isinstance(child, tk.Button): # Específico para tk.Button
-                     child.configure(foreground=self.colors["fg_light"], relief=tk.FLAT, borderwidth=1, highlightthickness=0,
-                                     activebackground=self.colors["accent_secondary"], activeforeground=self.colors["fg_white"])
+    def exportar_grafico(self):
+        if hasattr(self, "figura") and self.figura is not None:
+            self.figura.savefig("grafico_radar.png")
+            messagebox.showinfo("Exportación", "Gráfico exportado como PNG.")
+        else:
+            messagebox.showwarning("Exportación", "No hay gráfico para exportar.")

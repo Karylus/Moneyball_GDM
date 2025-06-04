@@ -2,14 +2,13 @@ import os
 import pandas as pd
 import unidecode
 import logging
-from src.database.connection import get_mongodb_connection, PLAYERS_COLLECTION, STATS_EXPLAINED_COLLECTION
+from src.database.conexion_mongodb import get_mongodb_connection, PLAYERS_COLLECTION, STATS_EXPLAINED_COLLECTION
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
 JUGADORES_FBREF = os.path.join(DATA_FOLDER, "fbref_full_stats_2425.csv")
-JUGADORES_TRANSFERMARKT = os.path.join(DATA_FOLDER, "players_transfermarkt.csv")
 EXPLICACIONES_ESTADISTICAS = os.path.join(DATA_FOLDER, "fbref_stats_explained.json")
 
 def normalizar_nombre(nombre):

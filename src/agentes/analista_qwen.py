@@ -1,10 +1,10 @@
 from langchain_ollama import ChatOllama
-from src.agentes.base_agent import BaseAgent, analizador_jugadores
+from src.agentes.agente_base import BaseAgent, analizador_jugadores
 
 
 class AgenteQwen(BaseAgent):
     """
-    Implementación del agente de análisis usando el modelo Qwen.
+    Implementación del agente con modelo Qwen.
     """
 
     def __init__(self):
@@ -36,8 +36,5 @@ class AgenteQwen(BaseAgent):
 
 
 def configurar_agente():
-    """
-    Función de fábrica para mantener compatibilidad con el código existente.
-    """
     agente = AgenteQwen()
     return agente.configurar_agente()

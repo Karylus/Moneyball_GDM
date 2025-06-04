@@ -1,5 +1,5 @@
 from langchain_groq import ChatGroq
-from src.agentes.base_agent import BaseAgent, analizador_jugadores
+from src.agentes.agente_base import BaseAgent, analizador_jugadores, explicar_estadisticas
 from dotenv import load_dotenv
 import os
 
@@ -13,7 +13,7 @@ if "GROQ_API_KEY" not in os.environ:
 
 class AgenteGroq(BaseAgent):
     """
-    Implementación del agente de análisis usando el modelo Groq.
+    Implementación del agente del modelo Groq.
     """
 
     def __init__(self):
@@ -22,7 +22,7 @@ class AgenteGroq(BaseAgent):
         """
         model_name = "llama-3.3-70b-versatile"
         temperature = 0.2
-        tools = [analizador_jugadores]
+        tools = [analizador_jugadores, explicar_estadisticas]
 
         super().__init__(
             model_name=model_name,
@@ -41,8 +41,5 @@ class AgenteGroq(BaseAgent):
 
 
 def configurar_agente():
-    """
-    Función de fábrica para mantener compatibilidad con el código existente.
-    """
     agente = AgenteGroq()
     return agente.configurar_agente()

@@ -43,6 +43,7 @@ def generar_flpr(terminos):
             if i == j:
                 flpr[i][j] = 0.5
             else:
+                #Proporción del valor de la alternativa i respecto a la suma de los valores de ambas alternativas.
                 flpr[i][j] = round(valores[i] / (valores[i] + valores[j]), 3)
 
     return flpr

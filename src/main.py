@@ -7,11 +7,7 @@ import unicodedata
 import re
 from io import StringIO
 
-sys.path.append(os.path.abspath("src"))
-
-if not sys.warnoptions:
-    import warnings
-    warnings.simplefilter("ignore")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def normalizar_texto(texto):
     """
@@ -24,21 +20,16 @@ def normalizar_texto(texto):
     Returns:
         str: Texto normalizado sin tildes, sin comillas y en minúsculas
     """
-    # Si el texto es None, devolver una cadena vacía
     if texto is None:
         return ""
 
-    # Convertir a string si no lo es
     if not isinstance(texto, str):
         texto = str(texto)
 
-    # Convertir a minúsculas
     texto = texto.lower()
 
-    # Eliminar comillas simples y dobles
     texto = texto.replace("'", "").replace('"', "")
 
-    # Normalizar NFD y eliminar diacríticos
     return ''.join(c for c in unicodedata.normalize('NFD', texto)
                   if not unicodedata.combining(c))
 
@@ -54,21 +45,16 @@ def extraer_csv(texto):
     Returns:
         str: Contenido CSV extraído
     """
-    # Buscar contenido entre ```csv y ```
     csv_match = re.search(r'```(?:csv|CSV)\s*([\s\S]*?)```', texto)
 
     if csv_match:
-        # Si encontramos los marcadores, extraemos el contenido entre ellos
         return csv_match.group(1).strip()
     else:
-        # Si no hay marcadores, intentamos procesar todo el texto como CSV
-        # Primero eliminamos cualquier texto antes de la primera línea que parezca un encabezado CSV
-        # (línea que contiene varias comas)
         lines = texto.split('\n')
         csv_start = 0
 
         for i, line in enumerate(lines):
-            if line.count(',') >= 2:  # Asumimos que una línea con al menos 3 campos es parte del CSV
+            if line.count(',') >= 2:
                 csv_start = i
                 break
 
@@ -250,11 +236,16 @@ from src.agentes.analista_gemini import configurar_agente as configurar_agente_g
 from src.agentes.analista_groq import configurar_agente as configurar_agente_groq
 from src.utils.logger import logger
 from src.core.fuzzy_matrices import generar_flpr, calcular_flpr_comun
-from src.core.consensus_logic import calcular_matriz_similitud, calcular_cr
-from src.core.ranking_logic import calcular_ranking_jugadores
+from src.core.logica_consenso import calcular_matriz_similitud, calcular_cr
+from src.core.logica_ranking import calcular_ranking_jugadores
 from langchain_core.prompts import ChatPromptTemplate
 
-with open('data/fbref_stats_explained.json', 'r', encoding='utf-8') as f:
+# Define the path to the data directory
+DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+EXPLICACIONES_ESTADISTICAS = os.path.join(DATA_FOLDER, "fbref_stats_explained.json")
+
+# Load the stats explanations
+with open(EXPLICACIONES_ESTADISTICAS, 'r', encoding='utf-8') as f:
     explicaciones_stats = json.load(f)
 
 explicaciones_formateadas = "\n".join([f"{clave}: {valor}" for clave, valor in explicaciones_stats.items() if not clave.startswith("_")])
@@ -1078,11 +1069,9 @@ if __name__ == "__main__":
 
                     print(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_nuevo}")
 
-            # Si no se alcanzó el consenso y no se llegó al máximo de rondas, continuar con la siguiente ronda
     else:
         print("\nSe ha alcanzado el nivel mínimo de consenso. No es necesario realizar la discusión y re-evaluación.")
 
-        # Calcular y mostrar el ranking de jugadores
         print("\n=== Ranking de Jugadores ===")
         ranking = calcular_ranking_jugadores(flpr_colectiva, jugadores)
 
