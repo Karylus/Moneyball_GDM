@@ -159,7 +159,7 @@ class MoneyballApp(tk.Tk):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.evaluacion_tab = EvaluacionTab(self.notebook, self.colors)
+        self.evaluacion_tab = PestañaEvaluacion(self.notebook, self.colors)
         self.database_tab = PestañaBaseDeDatos(self.notebook, self.colors)
 
         self.notebook.add(self.evaluacion_tab, text="Evaluar Jugadores")
@@ -204,7 +204,7 @@ class MoneyballApp(tk.Tk):
             self.after(1000, self.check_agents_ready)
 
 
-class EvaluacionTab(ttk.Frame):
+class PestañaEvaluacion(ttk.Frame):
     """
     Pestaña para la evaluación de los jugadores.
     Permite al usuario seleccionar hasta 3 jugadores y criterios para que los agentes los evalúen.
