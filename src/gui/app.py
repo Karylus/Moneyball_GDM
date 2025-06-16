@@ -1011,6 +1011,8 @@ class PestañaEvaluacion(ttk.Frame):
                     ranking = calcular_ranking_jugadores(flpr_colectiva, jugadores)
                     self.agregar_resultado("TOP JUGADORES (de mejor a peor):")
                     for posicion, (jugador, puntuacion) in enumerate(ranking, 1):
+                        if puntuacion == 0:
+                            puntuacion = "10.000"
                         self.agregar_resultado(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
                 else:
                     self.agregar_resultado("No se puede generar ranking debido a FLPR colectiva no válida.")
