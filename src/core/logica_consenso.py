@@ -84,7 +84,7 @@ def calcular_consenso_nivel3(matriz_consenso):
     return round(np.mean(consenso_nivel2), 3)
 
 
-def calcular_cr(matrices_similitud, consenso_minimo=0.8):
+def calcular_cr(matrices_similitud, consenso_minimo=0.9):
     """
     Calcula el nivel medio de consenso (CR) y verifica si se alcanza el consenso mínimo.
 

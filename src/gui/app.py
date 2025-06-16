@@ -186,7 +186,7 @@ class MoneyballApp(tk.Tk):
             self.agente_groq = configurar_agente_groq()
             self.agents_ready = True
 
-            self.evaluacion_tab.set_agents(self.agente_qwen, self.agente_gemini, self.agente_groq)
+            self.evaluacion_tab.establecer_agentes(self.agente_qwen, self.agente_gemini, self.agente_groq)
         except Exception as e:
             self.agents_ready = False
             self.agent_error = str(e)
@@ -209,410 +209,381 @@ class PestañaEvaluacion(ttk.Frame):
     Pestaña para la evaluación de los jugadores.
     Permite al usuario seleccionar hasta 3 jugadores y criterios para que los agentes los evalúen.
     """
-    def __init__(self, parent, colors):
-        super().__init__(parent)
-        self.colors = colors
+    def __init__(self, padre, colores):
+        super().__init__(padre)
+        self.colores = colores
 
         self.agente_qwen = None
         self.agente_gemini = None
         self.agente_groq = None
 
-        self.selected_players = []
-        self.selected_criteria = []
-        self.max_players = 3
-        self.player_data_dict = {}
+        self.jugadores_seleccionados = []
+        self.criterios_seleccionados = []
+        self.max_jugadores = 3
+        self.datos_jugadores = {}
 
         self.valores_linguisticos = ["Muy Bajo", "Bajo", "Medio", "Alto", "Muy Alto"]
 
-        self.seasons = ["2022-2023", "2023-2024", "2024-2025"]
-        self.selected_season = StringVar(value=self.seasons[-1])
+        self.temporadas = ["2022-2023", "2023-2024", "2024-2025"]
+        self.temporada_seleccionada = StringVar(value=self.temporadas[-1])
 
-        self.load_player_data()
-
+        self.cargar_datos_jugadores()
         self.crear_widgets()
 
-    def load_player_data(self):
-        """Carga los datos de los jugadores desde la base de datos"""
+    def cargar_datos_jugadores(self):
         try:
-            season = self.selected_season.get()
-            self.df_players = cargar_estadisticas_jugadores(season)
-            if isinstance(self.df_players, str):  # Si hay un error
-                messagebox.showerror("Error", f"Error al cargar datos de jugadores: {self.df_players}")
-                self.df_players = None
+            temporada = self.temporada_seleccionada.get()
+            self.df_jugadores = cargar_estadisticas_jugadores(temporada)
+            if isinstance(self.df_jugadores, str):
+                messagebox.showerror("Error", f"Error al cargar datos de jugadores: {self.df_jugadores}")
+                self.df_jugadores = None
         except Exception as e:
             messagebox.showerror("Error", f"Error al cargar datos de jugadores: {str(e)}")
-            self.df_players = None
+            self.df_jugadores = None
+
+    def limpiar_comillas_matriz(self, matriz):
+        return [
+            [str(x).replace('"', '').replace("'", '') for x in fila]
+            for fila in matriz
+        ]
 
     def crear_widgets(self):
-        """Crea los widgets para la pestaña de evaluación"""
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        marco_principal = ttk.Frame(self)
+        marco_principal.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        left_frame = ttk.Frame(main_frame)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        marco_izquierdo = ttk.Frame(marco_principal)
+        marco_izquierdo.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-        right_frame = ttk.Frame(main_frame)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        marco_derecho = ttk.Frame(marco_principal)
+        marco_derecho.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
-        search_frame = ttk.LabelFrame(left_frame, text="Buscar Jugadores")
-        search_frame.pack(fill=tk.X, pady=5, ipady=5)
+        marco_busqueda = ttk.LabelFrame(marco_izquierdo, text="Buscar Jugadores")
+        marco_busqueda.pack(fill=tk.X, pady=5, ipady=5)
 
-        season_frame = ttk.Frame(search_frame)
-        season_frame.pack(fill=tk.X, padx=10, pady=(5,10))
+        marco_temporada = ttk.Frame(marco_busqueda)
+        marco_temporada.pack(fill=tk.X, padx=10, pady=(5,10))
 
-        ttk.Label(season_frame, text="Temporada:").pack(side=tk.LEFT, padx=(0,5))
-        self.season_combo = ttk.Combobox(season_frame, textvariable=self.selected_season,
-                                        values=self.seasons, state="readonly", width=8)
-        self.season_combo.pack(side=tk.LEFT, padx=5)
-        self.season_combo.bind("<<ComboboxSelected>>", self.on_season_selected)
+        ttk.Label(marco_temporada, text="Temporada:").pack(side=tk.LEFT, padx=(0,5))
+        self.combo_temporada = ttk.Combobox(marco_temporada, textvariable=self.temporada_seleccionada,
+                                            values=self.temporadas, state="readonly", width=8)
+        self.combo_temporada.pack(side=tk.LEFT, padx=5)
+        self.combo_temporada.bind("<<ComboboxSelected>>", self.al_seleccionar_temporada)
 
-        self.search_var = StringVar()
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        self.search_entry.pack(fill=tk.X, padx=10, pady=(0,10)) # Padding aumentado
-        self.search_entry.bind("<KeyRelease>", self.on_search_key_release)
+        self.var_busqueda = StringVar()
+        self.entrada_busqueda = ttk.Entry(marco_busqueda, textvariable=self.var_busqueda)
+        self.entrada_busqueda.pack(fill=tk.X, padx=10, pady=(0,10))
+        self.entrada_busqueda.bind("<KeyRelease>", self.al_escribir_busqueda)
 
-        players_frame_inner = ttk.Frame(search_frame)
-        players_frame_inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0,5))
+        marco_lista_jugadores = ttk.Frame(marco_busqueda)
+        marco_lista_jugadores.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0,5))
 
-        self.players_listbox = tk.Listbox(players_frame_inner, height=8,
-                                         bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                         selectbackground=self.colors["accent_color"],
-                                         selectforeground=self.colors["fg_white"],
-                                         borderwidth=0, highlightthickness=0,
-                                         font=("Arial", 10))
-        self.players_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.lista_jugadores = tk.Listbox(marco_lista_jugadores, height=8,
+                                          bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                          selectbackground=self.colores["accent_color"],
+                                          selectforeground=self.colores["fg_white"],
+                                          borderwidth=0, highlightthickness=0,
+                                          font=("Arial", 10))
+        self.lista_jugadores.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        players_scrollbar = ttk.Scrollbar(players_frame_inner, command=self.players_listbox.yview)
-        players_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.players_listbox.config(yscrollcommand=players_scrollbar.set)
+        barra_jugadores = ttk.Scrollbar(marco_lista_jugadores, command=self.lista_jugadores.yview)
+        barra_jugadores.pack(side=tk.RIGHT, fill=tk.Y)
+        self.lista_jugadores.config(yscrollcommand=barra_jugadores.set)
 
-        add_player_button = ttk.Button(search_frame, text="Añadir Jugador", command=self.add_selected_player)
-        add_player_button.pack(fill=tk.X, padx=10, pady=(5,10))
+        boton_añadir_jugador = ttk.Button(marco_busqueda, text="Añadir Jugador", command=self.añadir_jugador_seleccionado)
+        boton_añadir_jugador.pack(fill=tk.X, padx=10, pady=(5,10))
 
-        selected_players_frame = ttk.LabelFrame(left_frame, text="Jugadores Seleccionados")
-        selected_players_frame.pack(fill=tk.X, pady=5, ipady=5)
+        marco_jugadores_seleccionados = ttk.LabelFrame(marco_izquierdo, text="Jugadores Seleccionados")
+        marco_jugadores_seleccionados.pack(fill=tk.X, pady=5, ipady=5)
 
-        self.selected_players_listbox = tk.Listbox(selected_players_frame, height=3,
-                                                   bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                                   selectbackground=self.colors["accent_color"],
-                                                   selectforeground=self.colors["fg_white"],
-                                                   borderwidth=0, highlightthickness=0,
-                                                   font=("Arial", 10))
-        self.selected_players_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.lista_jugadores_seleccionados = tk.Listbox(marco_jugadores_seleccionados, height=3,
+                                                        bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                                        selectbackground=self.colores["accent_color"],
+                                                        selectforeground=self.colores["fg_white"],
+                                                        borderwidth=0, highlightthickness=0,
+                                                        font=("Arial", 10))
+        self.lista_jugadores_seleccionados.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        remove_player_button = ttk.Button(selected_players_frame, text="Eliminar Jugador", command=self.remove_selected_player)
-        remove_player_button.pack(fill=tk.X, padx=10, pady=(0,10))
+        boton_eliminar_jugador = ttk.Button(marco_jugadores_seleccionados, text="Eliminar Jugador", command=self.eliminar_jugador_seleccionado)
+        boton_eliminar_jugador.pack(fill=tk.X, padx=10, pady=(0,10))
 
-        criteria_frame = ttk.LabelFrame(left_frame, text="Criterios de Evaluación")
-        criteria_frame.pack(fill=tk.X, pady=5, ipady=5)
+        marco_criterios = ttk.LabelFrame(marco_izquierdo, text="Criterios de Evaluación")
+        marco_criterios.pack(fill=tk.X, pady=5, ipady=5)
 
-        self.predefined_criteria = {
-                "General": ["Técnica", "Físico", "Visión de juego", "Posicionamiento", "Toma de decisiones", "Liderazgo", "Disciplina táctica", "Versatilidad"],
-                "Porteros": ["Paradas", "Juego aéreo", "Juego con los pies", "Reflejos", "Posicionamiento", "Comunicación", "Salidas", "Distribución", "Penaltis"],
-                "Defensas": ["Anticipación", "Juego aéreo", "Entradas", "Posicionamiento", "Salida de balón", "Marcaje", "Bloqueos", "Despejes", "Velocidad", "Agresividad"],
-                "Mediocentros defensivos": ["Recuperación", "Pases", "Posicionamiento", "Visión de juego", "Resistencia", "Cobertura", "Presión", "Duelos aéreos", "Intercepciones"],
-                "Mediocentros": ["Control", "Pases", "Visión de juego", "Técnica", "Movilidad", "Llegada al área", "Regate", "Creatividad", "Trabajo defensivo"],
-                "Mediopuntas": ["Creatividad", "Regate", "Pases", "Disparo", "Movimiento sin balón", "Asociación", "Llegada", "Finalización", "Desmarque"],
-                "Carrileros": ["Velocidad", "Centros", "Resistencia", "Defensa", "Ataque", "Regate", "Apoyo ofensivo", "Cobertura defensiva", "Desborde"],
-                "Delanteros": ["Definición", "Movimiento", "Juego aéreo", "Técnica", "Posicionamiento", "Desmarque", "Finalización", "Regate", "Asociación", "Presión alta"]
-            }
+        self.criterios_predefinidos = {
+            "General": ["Técnica", "Físico", "Visión de juego", "Posicionamiento", "Toma de decisiones", "Liderazgo", "Disciplina táctica", "Versatilidad"],
+            "Porteros": ["Paradas", "Juego aéreo", "Juego con los pies", "Reflejos", "Posicionamiento", "Comunicación", "Salidas", "Distribución", "Penaltis"],
+            "Defensas": ["Anticipación", "Juego aéreo", "Entradas", "Posicionamiento", "Salida de balón", "Marcaje", "Bloqueos", "Despejes", "Velocidad", "Agresividad"],
+            "Mediocentros defensivos": ["Recuperación", "Pases", "Posicionamiento", "Visión de juego", "Resistencia", "Cobertura", "Presión", "Duelos aéreos", "Intercepciones"],
+            "Mediocentros": ["Control", "Pases", "Visión de juego", "Técnica", "Movilidad", "Llegada al área", "Regate", "Creatividad", "Trabajo defensivo"],
+            "Mediopuntas": ["Creatividad", "Regate", "Pases", "Disparo", "Movimiento sin balón", "Asociación", "Llegada", "Finalización", "Desmarque"],
+            "Carrileros": ["Velocidad", "Centros", "Resistencia", "Defensa", "Ataque", "Regate", "Apoyo ofensivo", "Cobertura defensiva", "Desborde"],
+            "Delanteros": ["Definición", "Movimiento", "Juego aéreo", "Técnica", "Posicionamiento", "Desmarque", "Finalización", "Regate", "Asociación", "Presión alta"]
+        }
 
-        position_frame = ttk.Frame(criteria_frame)
-        position_frame.pack(fill=tk.X, padx=10, pady=10)
-        ttk.Label(position_frame, text="Posición:").pack(side=tk.LEFT, padx=(0,5))
-        self.position_var = StringVar()
-        positions = list(self.predefined_criteria.keys())
-        self.position_combo = ttk.Combobox(position_frame, textvariable=self.position_var,
-                                          values=positions, state="readonly", width=20)
-        self.position_combo.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        self.position_combo.current(0)
-        self.position_combo.bind("<<ComboboxSelected>>", self.on_position_selected)
+        marco_posicion = ttk.Frame(marco_criterios)
+        marco_posicion.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Label(marco_posicion, text="Posición:").pack(side=tk.LEFT, padx=(0,5))
+        self.var_posicion = StringVar()
+        posiciones = list(self.criterios_predefinidos.keys())
+        self.combo_posicion = ttk.Combobox(marco_posicion, textvariable=self.var_posicion,
+                                           values=posiciones, state="readonly", width=20)
+        self.combo_posicion.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.combo_posicion.current(0)
+        self.combo_posicion.bind("<<ComboboxSelected>>", self.al_seleccionar_posicion)
 
-        criteria_selection_frame = ttk.Frame(criteria_frame)
-        criteria_selection_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        marco_seleccion_criterios = ttk.Frame(marco_criterios)
+        marco_seleccion_criterios.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        available_criteria_frame = ttk.LabelFrame(criteria_selection_frame, text="Disponibles")
-        available_criteria_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 2))
-        self.available_criteria_listbox = tk.Listbox(available_criteria_frame, height=5,
-                                                      bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                                      selectbackground=self.colors["accent_color"],
-                                                      selectforeground=self.colors["fg_white"],
+        marco_criterios_disponibles = ttk.LabelFrame(marco_seleccion_criterios, text="Disponibles")
+        marco_criterios_disponibles.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 2))
+        self.lista_criterios_disponibles = tk.Listbox(marco_criterios_disponibles, height=5,
+                                                      bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                                      selectbackground=self.colores["accent_color"],
+                                                      selectforeground=self.colores["fg_white"],
                                                       borderwidth=0, highlightthickness=0,
                                                       font=("Arial", 10))
-        self.available_criteria_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.lista_criterios_disponibles.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        selected_criteria_frame = ttk.LabelFrame(criteria_selection_frame, text="Seleccionados")
-        selected_criteria_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(2, 0))
-        self.criteria_listbox = tk.Listbox(selected_criteria_frame, height=5,
-                                           bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                           selectbackground=self.colors["accent_color"],
-                                           selectforeground=self.colors["fg_white"],
-                                           borderwidth=0, highlightthickness=0,
-                                           font=("Arial", 10))
-        self.criteria_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        marco_criterios_seleccionados = ttk.LabelFrame(marco_seleccion_criterios, text="Seleccionados")
+        marco_criterios_seleccionados.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(2, 0))
+        self.lista_criterios_seleccionados = tk.Listbox(marco_criterios_seleccionados, height=5,
+                                                        bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                                        selectbackground=self.colores["accent_color"],
+                                                        selectforeground=self.colores["fg_white"],
+                                                        borderwidth=0, highlightthickness=0,
+                                                        font=("Arial", 10))
+        self.lista_criterios_seleccionados.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        criteria_buttons_frame = ttk.Frame(criteria_frame)
-        criteria_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
-        add_criteria_button = ttk.Button(criteria_buttons_frame, text="Añadir →", command=self.add_selected_criteria)
-        add_criteria_button.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
-        remove_criteria_button = ttk.Button(criteria_buttons_frame, text="← Eliminar", command=self.remove_criteria)
-        remove_criteria_button.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(2, 0))
+        marco_botones_criterios = ttk.Frame(marco_criterios)
+        marco_botones_criterios.pack(fill=tk.X, padx=10, pady=5)
+        boton_añadir_criterio = ttk.Button(marco_botones_criterios, text="Añadir →", command=self.añadir_criterio_seleccionado)
+        boton_añadir_criterio.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+        boton_eliminar_criterio = ttk.Button(marco_botones_criterios, text="← Eliminar", command=self.eliminar_criterio)
+        boton_eliminar_criterio.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(2, 0))
 
-        self.update_available_criteria("General")
+        self.actualizar_criterios_disponibles("General")
 
-        params_frame = ttk.LabelFrame(left_frame, text="Parámetros de Evaluación")
-        params_frame.pack(fill=tk.X, pady=5, ipady=5)
+        marco_parametros = ttk.LabelFrame(marco_izquierdo, text="Parámetros de Evaluación")
+        marco_parametros.pack(fill=tk.X, pady=5, ipady=5)
 
-        consensus_frame = ttk.Frame(params_frame)
-        consensus_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Label(consensus_frame, text="Nivel de consenso (0-1):").pack(side=tk.LEFT)
-        self.consensus_var = StringVar(value="0.90") # Nivel de consenso por defecto
-        consensus_entry = ttk.Entry(consensus_frame, textvariable=self.consensus_var, width=5)
-        consensus_entry.pack(side=tk.RIGHT)
+        marco_consenso = ttk.Frame(marco_parametros)
+        marco_consenso.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Label(marco_consenso, text="Nivel de consenso (0-1):").pack(side=tk.LEFT)
+        self.var_consenso = StringVar(value="0.90")
+        entrada_consenso = ttk.Entry(marco_consenso, textvariable=self.var_consenso, width=5)
+        entrada_consenso.pack(side=tk.RIGHT)
 
-        rounds_frame = ttk.Frame(params_frame)
-        rounds_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Label(rounds_frame, text="Máximo de rondas:").pack(side=tk.LEFT)
-        self.rounds_var = StringVar(value="3") #Máximo de rondas por defecto
-        rounds_entry = ttk.Entry(rounds_frame, textvariable=self.rounds_var, width=5)
-        rounds_entry.pack(side=tk.RIGHT)
+        marco_rondas = ttk.Frame(marco_parametros)
+        marco_rondas.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Label(marco_rondas, text="Máximo de rondas:").pack(side=tk.LEFT)
+        self.var_rondas = StringVar(value="3")
+        entrada_rondas = ttk.Entry(marco_rondas, textvariable=self.var_rondas, width=5)
+        entrada_rondas.pack(side=tk.RIGHT)
 
-        self.evaluate_button = ttk.Button(left_frame, text="Evaluar Jugadores", command=self.evaluate_players)
-        self.evaluate_button.pack(fill=tk.X, pady=10, ipady=5)
+        self.boton_evaluar = ttk.Button(marco_izquierdo, text="Evaluar Jugadores", command=self.evaluar_jugadores)
+        self.boton_evaluar.pack(fill=tk.X, pady=10, ipady=5)
 
-        # --- FRAME DERECHO ---
+        marco_resultados = ttk.LabelFrame(marco_derecho, text="Resultados de la Evaluación")
+        marco_resultados.pack(fill=tk.BOTH, expand=True, ipady=5)
 
-        results_frame = ttk.LabelFrame(right_frame, text="Resultados de la Evaluación")
-        results_frame.pack(fill=tk.BOTH, expand=True, ipady=5)
+        self.texto_resultados = tk.Text(marco_resultados, wrap=tk.WORD, state=tk.DISABLED,
+                                        bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"],
+                                        insertbackground=self.colores["fg_white"],
+                                        borderwidth=0, highlightthickness=0,
+                                        font=("Arial", 10), relief=tk.FLAT, padx=5, pady=5)
+        self.texto_resultados.pack(fill=tk.BOTH, expand=True, side=tk.LEFT, padx=5, pady=5)
 
-        self.results_text = tk.Text(results_frame, wrap=tk.WORD, state=tk.DISABLED,
-                                    bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"],
-                                    insertbackground=self.colors["fg_white"],
-                                    borderwidth=0, highlightthickness=0,
-                                    font=("Arial", 10), relief=tk.FLAT, padx=5, pady=5)
-        self.results_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT, padx=5, pady=5)
+        barra_resultados = ttk.Scrollbar(marco_resultados, command=self.texto_resultados.yview)
+        barra_resultados.pack(side=tk.RIGHT, fill=tk.Y)
+        self.texto_resultados.config(yscrollcommand=barra_resultados.set)
 
-        results_scrollbar = ttk.Scrollbar(results_frame, command=self.results_text.yview)
-        results_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.results_text.config(yscrollcommand=results_scrollbar.set)
+        self.agregar_resultado("Bienvenido al sistema de evaluación de jugadores.\n\n"
+                              "Instrucciones:\n"
+                              "1. Seleccione hasta 3 jugadores\n"
+                              "2. Defina los criterios de evaluación\n"
+                              "3. Ajuste los parámetros si lo desea\n"
+                              "4. Haga clic en 'Evaluar Jugadores'\n\n"
+                              "Los agentes evaluarán a los jugadores y mostrarán los resultados aquí.")
 
-        self.add_result("Bienvenido al sistema de evaluación de jugadores.\n\n"
-                       "Instrucciones:\n"
-                       "1. Seleccione hasta 3 jugadores\n"
-                       "2. Defina los criterios de evaluación\n"
-                       "3. Ajuste los parámetros si lo desea\n"
-                       "4. Haga clic en 'Evaluar Jugadores'\n\n"
-                       "Los agentes evaluarán a los jugadores y mostrarán los resultados aquí.")
+        self.boton_exportar_pdf = ttk.Button(marco_izquierdo, text="Exportar a PDF", command=self.exportar_pdf, state=tk.DISABLED)
+        self.boton_exportar_pdf.pack(fill=tk.X, pady=5, ipady=5)
 
-        self.export_pdf_button = ttk.Button(left_frame, text="Exportar a PDF", command=self.exportar_pdf, state=tk.DISABLED)
-        self.export_pdf_button.pack(fill=tk.X, pady=5, ipady=5)
-
-    def set_agents(self, agente_qwen, agente_gemini, agente_groq):
-        """Establece los agentes para la evaluación"""
+    def establecer_agentes(self, agente_qwen, agente_gemini, agente_groq):
         self.agente_qwen = agente_qwen
         self.agente_gemini = agente_gemini
         self.agente_groq = agente_groq
 
-        if hasattr(self, 'results_text') and self.results_text.winfo_exists():
-            self.add_result("Los agentes están listos para la evaluación.")
+        if hasattr(self, 'texto_resultados') and self.texto_resultados.winfo_exists():
+            self.agregar_resultado("Los agentes están listos para la evaluación.")
 
-
-    def add_result(self, message):
-        """Añade un mensaje al área de resultados"""
-        if not hasattr(self, 'results_text') or not self.results_text.winfo_exists(): # Comprobar si el widget existe
+    def agregar_resultado(self, mensaje):
+        if not hasattr(self, 'texto_resultados') or not self.texto_resultados.winfo_exists():
             return
-        self.results_text.config(state=tk.NORMAL)
-        self.results_text.insert(tk.END, f"{message}\n\n")
-        self.results_text.see(tk.END)
-        self.results_text.config(state=tk.DISABLED)
+        self.texto_resultados.config(state=tk.NORMAL)
+        self.texto_resultados.insert(tk.END, f"{mensaje}\n\n")
+        self.texto_resultados.see(tk.END)
+        self.texto_resultados.config(state=tk.DISABLED)
 
-    def on_season_selected(self, event):
-        """Maneja la selección de una temporada"""
+    def al_seleccionar_temporada(self, evento):
+        self.cargar_datos_jugadores()
+        self.lista_jugadores.delete(0, tk.END)
+        self.var_busqueda.set("")
 
-        self.load_player_data()
-        self.players_listbox.delete(0, tk.END)
-        self.search_var.set("")
-
-    def on_search_key_release(self, event):
-        """Maneja la búsqueda de jugadores mientras se escribe"""
-        search_text = self.search_var.get().lower()
-
-        self.players_listbox.delete(0, tk.END)
-
-        if not search_text or self.df_players is None:
+    def al_escribir_busqueda(self, evento):
+        texto_busqueda = self.var_busqueda.get().lower()
+        self.lista_jugadores.delete(0, tk.END)
+        if not texto_busqueda or self.df_jugadores is None:
             return
-
         try:
-            if 'normalized_name' not in self.df_players.columns:
-                self.df_players['normalized_name'] = self.df_players['Player'].fillna('').astype(str).str.lower()
-
-            mask = self.df_players['normalized_name'].astype(str).str.contains(search_text, na=False)
-            filtered_players = self.df_players[mask]
-
-            filtered_players = filtered_players.head(20)
-
-            self.player_data_dict.clear()
-
-            for index, player_row in filtered_players.iterrows():
-                player_name = player_row.get('Player', 'Desconocido')
-                self.player_data_dict[player_name] = player_row
-
-                self.players_listbox.insert(tk.END, player_name)
+            if 'normalized_name' not in self.df_jugadores.columns:
+                self.df_jugadores['normalized_name'] = self.df_jugadores['Player'].fillna('').astype(str).str.lower()
+            mascara = self.df_jugadores['normalized_name'].astype(str).str.contains(texto_busqueda, na=False)
+            jugadores_filtrados = self.df_jugadores[mascara]
+            jugadores_filtrados = jugadores_filtrados.head(20)
+            self.datos_jugadores.clear()
+            for _, fila_jugador in jugadores_filtrados.iterrows():
+                nombre_jugador = fila_jugador.get('Player', 'Desconocido')
+                self.datos_jugadores[nombre_jugador] = fila_jugador
+                self.lista_jugadores.insert(tk.END, nombre_jugador)
         except Exception as e:
             messagebox.showerror("Error", f"Error al buscar jugadores: {str(e)}")
 
-
-    def add_selected_player(self):
-        """Añade el jugador seleccionado a la lista de jugadores seleccionados"""
-        selection = self.players_listbox.curselection()
-        if not selection:
+    def añadir_jugador_seleccionado(self):
+        seleccion = self.lista_jugadores.curselection()
+        if not seleccion:
             messagebox.showinfo("Información", "Por favor, seleccione un jugador de la lista.")
             return
-
-        display_name = self.players_listbox.get(selection[0])
-
-        if display_name in self.selected_players:
-            messagebox.showinfo("Información", f"El jugador '{display_name}' ya está seleccionado.")
+        nombre = self.lista_jugadores.get(seleccion[0])
+        if nombre in self.jugadores_seleccionados:
+            messagebox.showinfo("Información", f"El jugador '{nombre}' ya está seleccionado.")
             return
-
-        if len(self.selected_players) >= self.max_players:
-            messagebox.showinfo("Información", f"Solo puede seleccionar hasta {self.max_players} jugadores.")
+        if len(self.jugadores_seleccionados) >= self.max_jugadores:
+            messagebox.showinfo("Información", f"Solo puede seleccionar hasta {self.max_jugadores} jugadores.")
             return
+        self.jugadores_seleccionados.append(nombre)
+        self.lista_jugadores_seleccionados.insert(tk.END, nombre)
 
-        self.selected_players.append(display_name)
-        self.selected_players_listbox.insert(tk.END, display_name)
-
-    def remove_selected_player(self):
-        """Elimina el jugador seleccionado de la lista de jugadores seleccionados"""
-        selection = self.selected_players_listbox.curselection()
-        if not selection:
+    def eliminar_jugador_seleccionado(self):
+        seleccion = self.lista_jugadores_seleccionados.curselection()
+        if not seleccion:
             messagebox.showinfo("Información", "Por favor, seleccione un jugador de la lista para eliminarlo.")
             return
+        indice = seleccion[0]
+        nombre = self.lista_jugadores_seleccionados.get(indice)
+        if nombre in self.jugadores_seleccionados:
+            self.jugadores_seleccionados.remove(nombre)
+        self.lista_jugadores_seleccionados.delete(indice)
 
-        index = selection[0]
-        player_name = self.selected_players_listbox.get(index)
+    def al_seleccionar_posicion(self, evento):
+        posicion = self.var_posicion.get()
+        self.actualizar_criterios_disponibles(posicion)
 
-        if player_name in self.selected_players:
-             self.selected_players.remove(player_name)
-        self.selected_players_listbox.delete(index)
+    def actualizar_criterios_disponibles(self, posicion):
+        self.lista_criterios_disponibles.delete(0, tk.END)
+        if posicion in self.criterios_predefinidos:
+            for criterio in self.criterios_predefinidos[posicion]:
+                if criterio not in self.criterios_seleccionados:
+                    self.lista_criterios_disponibles.insert(tk.END, criterio)
 
-
-    def on_position_selected(self, event):
-        """Maneja la selección de una posición"""
-        selected_position = self.position_var.get()
-        self.update_available_criteria(selected_position)
-
-    def update_available_criteria(self, position):
-        """Actualiza la lista de criterios disponibles según la posición seleccionada"""
-        self.available_criteria_listbox.delete(0, tk.END)
-
-        if position in self.predefined_criteria:
-            for criteria_item in self.predefined_criteria[position]:
-                if criteria_item not in self.selected_criteria:
-                    self.available_criteria_listbox.insert(tk.END, criteria_item)
-
-
-    def add_selected_criteria(self):
-        """Añade el criterio seleccionado a la lista de criterios seleccionados"""
-        selection = self.available_criteria_listbox.curselection()
-        if not selection:
+    def añadir_criterio_seleccionado(self):
+        seleccion = self.lista_criterios_disponibles.curselection()
+        if not seleccion:
             messagebox.showinfo("Información", "Por favor, seleccione un criterio de la lista disponible.")
             return
-
-        criteria_item = self.available_criteria_listbox.get(selection[0])
-
-        if criteria_item in self.selected_criteria:
-            messagebox.showinfo("Información", f"El criterio '{criteria_item}' ya está en la lista.")
+        criterio = self.lista_criterios_disponibles.get(seleccion[0])
+        if criterio in self.criterios_seleccionados:
+            messagebox.showinfo("Información", f"El criterio '{criterio}' ya está en la lista.")
             return
+        self.criterios_seleccionados.append(criterio)
+        self.lista_criterios_seleccionados.insert(tk.END, criterio)
+        self.lista_criterios_disponibles.delete(seleccion[0])
 
-        self.selected_criteria.append(criteria_item)
-        self.criteria_listbox.insert(tk.END, criteria_item)
-
-        self.available_criteria_listbox.delete(selection[0])
-
-    def remove_criteria(self):
-        """Elimina el criterio seleccionado de la lista de criterios"""
-        selection = self.criteria_listbox.curselection()
-        if not selection:
+    def eliminar_criterio(self):
+        seleccion = self.lista_criterios_seleccionados.curselection()
+        if not seleccion:
             messagebox.showinfo("Información", "Por favor, seleccione un criterio de la lista para eliminarlo.")
             return
+        indice = seleccion[0]
+        criterio = self.lista_criterios_seleccionados.get(indice)
+        if criterio in self.criterios_seleccionados:
+            self.criterios_seleccionados.remove(criterio)
+        self.lista_criterios_seleccionados.delete(indice)
+        posicion_actual = self.var_posicion.get()
+        if posicion_actual in self.criterios_predefinidos and \
+           criterio in self.criterios_predefinidos[posicion_actual]:
+            if criterio not in self.lista_criterios_disponibles.get(0, tk.END):
+                self.lista_criterios_disponibles.insert(tk.END, criterio)
 
-        index = selection[0]
-        criteria_item = self.criteria_listbox.get(index)
-
-        if criteria_item in self.selected_criteria:
-            self.selected_criteria.remove(criteria_item)
-        self.criteria_listbox.delete(index)
-
-        current_pos = self.position_var.get()
-        if current_pos in self.predefined_criteria and \
-           criteria_item in self.predefined_criteria[current_pos]:
-            if criteria_item not in self.available_criteria_listbox.get(0, tk.END):
-                 self.available_criteria_listbox.insert(tk.END, criteria_item)
-
-
-    def evaluate_players(self):
-        """Inicia el proceso de evaluación de jugadores"""
-        if not self.selected_players:
+    def evaluar_jugadores(self):
+        if not self.jugadores_seleccionados:
             messagebox.showinfo("Información", "Por favor, seleccione al menos un jugador.")
             return
-
-        if not self.selected_criteria:
+        if not self.criterios_seleccionados:
             messagebox.showinfo("Información", "Por favor, ingrese al menos un criterio.")
             return
-
         if not all([self.agente_qwen, self.agente_gemini, self.agente_groq]):
             messagebox.showinfo("Información", "Los agentes aún no están inicializados. Por favor, espere.")
             return
-
         try:
-            consenso_minimo = float(self.consensus_var.get())
+            consenso_minimo = float(self.var_consenso.get())
             if not (0 <= consenso_minimo <= 1):
                 messagebox.showinfo("Información", "El nivel de consenso debe estar entre 0 y 1.")
                 return
         except ValueError:
             messagebox.showinfo("Información", "Por favor, ingrese un valor numérico válido para el nivel de consenso.")
             return
-
         try:
-            max_rondas = int(self.rounds_var.get())
+            max_rondas = int(self.var_rondas.get())
             if max_rondas <= 0:
                 messagebox.showinfo("Información", "El número máximo de rondas debe ser mayor que 0.")
                 return
         except ValueError:
             messagebox.showinfo("Información", "Por favor, ingrese un valor numérico válido para el máximo de rondas.")
             return
-
-        self.evaluate_button.config(state=tk.DISABLED)
-
-        self.results_text.config(state=tk.NORMAL)
-        self.results_text.delete("1.0", tk.END)
-        self.results_text.config(state=tk.DISABLED)
-
-        self.add_result("Iniciando evaluación de jugadores...\n")
-        self.add_result(f"Jugadores: {', '.join(self.selected_players)}")
-        self.add_result(f"Criterios: {', '.join(self.selected_criteria)}")
-        self.add_result(f"Nivel de consenso: {consenso_minimo}")
-        self.add_result(f"Máximo de rondas: {max_rondas}")
-
+        self.boton_evaluar.config(state=tk.DISABLED)
+        self.texto_resultados.config(state=tk.NORMAL)
+        self.texto_resultados.delete("1.0", tk.END)
+        self.texto_resultados.config(state=tk.DISABLED)
+        self.agregar_resultado("Iniciando evaluación de jugadores...\n")
+        self.agregar_resultado(f"Jugadores: {', '.join(self.jugadores_seleccionados)}")
+        self.agregar_resultado(f"Criterios: {', '.join(self.criterios_seleccionados)}")
+        self.agregar_resultado(f"Nivel de consenso: {consenso_minimo}")
+        self.agregar_resultado(f"Máximo de rondas: {max_rondas}")
         threading.Thread(target=self.ejecutar_evaluacion, args=(
-            self.selected_players,
-            self.selected_criteria,
+            self.jugadores_seleccionados,
+            self.criterios_seleccionados,
             consenso_minimo,
             max_rondas
         ), daemon=True).start()
 
     def exportar_pdf(self):
-        from fpdf import FPDF
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", size=12)
+        pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
+        pdf.add_font('DejaVu', 'B', 'DejaVuSans-Bold.ttf', uni=True)
+        pdf.add_font('DejaVu', 'I', 'DejaVuSans-Oblique.ttf', uni=True)
+        pdf.add_font('DejaVu', 'BI', 'DejaVuSans-BoldOblique.ttf', uni=True)
+        pdf.set_font("DejaVu", size=12)
         pdf.cell(0, 10, "Resultados de la Evaluación", ln=True)
         pdf.ln(5)
 
-        pdf.set_font("Arial", style="B", size=12)
+        pdf.set_font("DejaVu", style="B", size=12)
+        pdf.cell(0, 10, "Jugadores evaluados:", ln=True)
+        pdf.set_font("DejaVu", size=10)
+        for jugador in self.jugadores_seleccionados:
+            pdf.cell(0, 8, f"- {jugador}", ln=True)
+        pdf.ln(2)
+
+        pdf.set_font("DejaVu", style="B", size=12)
+        pdf.cell(0, 10, "Criterios de evaluación:", ln=True)
+        pdf.set_font("DejaVu", size=10)
+        for criterio in self.criterios_seleccionados:
+            pdf.cell(0, 8, f"- {criterio}", ln=True)
+        pdf.ln(5)
+
+        pdf.set_font("DejaVu", style="B", size=12)
         pdf.cell(0, 10, "Matrices:", ln=True)
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("DejaVu", style="I", size=10)
         for nombre, matriz in (self.resultados_evaluacion.get("matrices") or {}).items():
             pdf.cell(0, 8, f"{nombre}:", ln=True)
             for fila in matriz:
@@ -620,26 +591,62 @@ class PestañaEvaluacion(ttk.Frame):
             pdf.ln(2)
 
         if self.resultados_evaluacion.get("discusiones"):
-            pdf.set_font("Arial", style="B", size=12)
+            pdf.set_font("DejaVu", style="B", size=12)
             pdf.cell(0, 10, "Discusiones:", ln=True)
-            pdf.set_font("Arial", size=10)
+            pdf.set_font("DejaVu", size=10)
             pdf.multi_cell(0, 8, str(self.resultados_evaluacion["discusiones"]))
             pdf.ln(2)
 
-        pdf.set_font("Arial", style="B", size=12)
+        pdf.set_font("DejaVu", style="B", size=12)
         pdf.cell(0, 10, "Nivel de Consenso (CR):", ln=True)
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("DejaVu", style="I", size=10)
         pdf.cell(0, 8, str(self.resultados_evaluacion.get("crs", "")), ln=True)
         pdf.ln(2)
 
-        pdf.set_font("Arial", style="B", size=12)
+        pdf.set_font("DejaVu", style="B", size=12)
         pdf.cell(0, 10, "Ranking Final:", ln=True)
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("DejaVu", size=10)
         for jugador, puntuacion in (self.resultados_evaluacion.get("ranking") or []):
-            pdf.cell(0, 8, f"{jugador}: {puntuacion}", ln=True)
+            pdf.cell(0, 8, f"{jugador}: {round(puntuacion, 3)}", ln=True)
 
         pdf.output("evaluacion_resultados.pdf")
+
         messagebox.showinfo("Exportación", "PDF exportado correctamente.")
+
+    def mostrar_distancias_al_consenso(self, flpr_usuario, flpr_agente_qwen, flpr_agente_gemini, flpr_agente_groq, flpr_colectiva):
+        distancias_agentes = []
+
+        if flpr_usuario is not None and flpr_colectiva is not None:
+            similitud_usuario = np.mean(calcular_matriz_similitud(flpr_usuario, flpr_colectiva))
+            distancia_usuario = 1 - similitud_usuario
+            distancias_agentes.append(("Usuario", distancia_usuario))
+
+        if flpr_agente_qwen is not None and flpr_colectiva is not None:
+            similitud_qwen = np.mean(calcular_matriz_similitud(flpr_agente_qwen, flpr_colectiva))
+            distancia_qwen = 1 - similitud_qwen
+            distancias_agentes.append(("Agente Qwen", distancia_qwen))
+
+        if flpr_agente_gemini is not None and flpr_colectiva is not None:
+            similitud_gemini = np.mean(calcular_matriz_similitud(flpr_agente_gemini, flpr_colectiva))
+            distancia_gemini = 1 - similitud_gemini
+            distancias_agentes.append(("Agente Gemini", distancia_gemini))
+
+        if flpr_agente_groq is not None and flpr_colectiva is not None:
+            similitud_groq = np.mean(calcular_matriz_similitud(flpr_agente_groq, flpr_colectiva))
+            distancia_groq = 1 - similitud_groq
+            distancias_agentes.append(("Agente Groq", distancia_groq))
+
+        distancias_agentes.sort(key=lambda x: x[1], reverse=True)
+
+        self.agregar_resultado(f"\n=== Ranking de Agentes por Distancia al Consenso ===")
+        self.agregar_resultado("Este ranking muestra qué agentes están más lejos de la opinión colectiva:")
+        for posicion, (agente, distancia) in enumerate(distancias_agentes, 1):
+            self.agregar_resultado(f"{posicion}. {agente} - Distancia al consenso: {distancia:.3f}")
+
+        if distancias_agentes:
+            agente_mas_lejano = distancias_agentes[0][0]
+            distancia_maxima = distancias_agentes[0][1]
+            self.agregar_resultado(f"\nEl agente que más influye en reducir el consenso global es: {agente_mas_lejano} (distancia: {distancia_maxima:.3f})")
 
     def ejecutar_evaluacion(self, jugadores, criterios, consenso_minimo, max_rondas):
         """Ejecuta el proceso de evaluación en un hilo separado"""
@@ -653,7 +660,7 @@ class PestañaEvaluacion(ttk.Frame):
                     "Responde siempre SOLO en el formato CSV siguiente, no devuelvas ningún texto adicional\n "
 
                     "Output format:\n\n"
-                    "1. La Primera linea es: ```CSV\n"
+                    "1. La Primera linea es SIEMPRE: ```CSV\n"
                     "2. El encabezado será con los campos: la palabra Jugador, y cada criterio separado por comas\n"
                     "3. Una linea extra por cada nombre de jugador junto a SOLO sus calificaciones lingüísticas, separadas por comas.\n"
                     "4. Ultima linea: ```\n\n"
@@ -676,7 +683,7 @@ class PestañaEvaluacion(ttk.Frame):
             def procesar_csv_agente(output_agente, criterios_list):
                 matriz = []
                 try:
-                    csv_match = re.search(r'```(?:csv|CSV)\s*([\s\S]*?)```', output_agente)
+                    csv_match = re.search(r'```(?:csv|CSV)?\s*([\s\S]*?)```', output_agente)
                     if csv_match:
                         csv_content = csv_match.group(1).strip()
                     else:
@@ -693,7 +700,7 @@ class PestañaEvaluacion(ttk.Frame):
                             if potential_csv_lines:
                                 csv_content = "\n".join(potential_csv_lines)
                             else:
-                                self.add_result(f"ADVERTENCIA: No se pudo extraer contenido CSV claro de la respuesta del agente.")
+                                self.agregar_resultado(f"ADVERTENCIA: No se pudo extraer contenido CSV claro de la respuesta del agente.")
                                 return [], False
 
 
@@ -724,20 +731,20 @@ class PestañaEvaluacion(ttk.Frame):
                                         idx_criterio = criterios_list.index(criterio_esperado)
                                         valor_encontrado = list(row.values())[idx_criterio + 1]
                                         calificaciones.append(str(valor_encontrado).replace("'", "").replace('"', "").strip())
-                                        self.add_result(f"ADVERTENCIA: Criterio '{criterio_esperado}' no encontrado por nombre, usando posición.")
+                                        self.agregar_resultado(f"ADVERTENCIA: Criterio '{criterio_esperado}' no encontrado por nombre, usando posición.")
                                     except (ValueError, IndexError):
-                                        self.add_result(f"ERROR: Criterio '{criterio_esperado}' no encontrado en los datos del CSV ni por posición.")
+                                        self.agregar_resultado(f"ERROR: Criterio '{criterio_esperado}' no encontrado en los datos del CSV ni por posición.")
                                         return [], False
                                 else:
-                                    self.add_result(f"ERROR: Criterio '{criterio_esperado}' no encontrado en los datos del CSV. Headers: {csv_headers}")
+                                    self.agregar_resultado(f"ERROR: Criterio '{criterio_esperado}' no encontrado en los datos del CSV. Headers: {csv_headers}")
                                     return [], False
                         matriz.append(calificaciones)
                     if not matriz:
-                        self.add_result(f"ERROR: No se pudieron extraer datos de la matriz del CSV. Contenido CSV procesado:\n{csv_content}")
+                        self.agregar_resultado(f"ERROR: No se pudieron extraer datos de la matriz del CSV. Contenido CSV procesado:\n{csv_content}")
                         return [], False
                     return matriz, True
                 except Exception as e:
-                    self.add_result(f"ERROR: No se pudo procesar la salida del agente: {str(e)}\nContenido CSV intentado:\n{csv_content if 'csv_content' in locals() else 'No disponible'}")
+                    self.agregar_resultado(f"ERROR: No se pudo procesar la salida del agente: {str(e)}\nContenido CSV intentado:\n{csv_content if 'csv_content' in locals() else 'No disponible'}")
                     return [], False
 
             def generar_matriz_aleatoria(jugadores_list, criterios_list, valores_linguisticos):
@@ -748,54 +755,95 @@ class PestañaEvaluacion(ttk.Frame):
                     matriz.append(calificaciones)
                 return matriz
 
-            def evaluar_con_agente(agente, prompt_str, jugadores_list, criterios_list, valores_linguisticos, nombre_agente, max_intentos_agente):
-                self.add_result(f"\n=== Evaluación con el Agente {nombre_agente} ===")
+            def evaluar_con_agente(agente, prompt_str, jugadores_list, criterios_list,
+                                   valores_linguisticos, nombre_agente, max_intentos_agente):
+                self.agregar_resultado(f"\n=== Evaluación con el Agente {nombre_agente} ===")
                 intento_actual = 0
                 matriz_agente = []
 
+
+
                 while intento_actual < max_intentos_agente:
                     intento_actual += 1
-                    self.add_result(f"Consultando al agente {nombre_agente} (Intento {intento_actual}/{max_intentos_agente})...")
+                    self.agregar_resultado(
+                        f"Consultando al agente {nombre_agente} (Intento {intento_actual}/{max_intentos_agente})...")
                     try:
+
                         respuesta_agente = agente.invoke({"input": prompt_str})
-                        output_agente = respuesta_agente.get("output", "No hay respuesta del agente.")
+                        output_agente = respuesta_agente.get("output",
+                                                             "No hay respuesta del agente.")
                     except Exception as e:
                         output_agente = f"ERROR: Excepción al invocar agente {nombre_agente}: {str(e)}"
-                        self.add_result(output_agente)
-                        if intento_actual >= max_intentos_agente:
-                            break
+                        self.agregar_resultado(output_agente)
+                        reintentar = messagebox.askretrycancel(
+                            "Error en agente",
+                            f"El agente {nombre_agente} falló:\n{str(e)}\n\n¿Desea reintentar?"
+                        )
+                        if not reintentar:
+                            self.agregar_resultado(
+                                f"Evaluación abortada por el usuario tras fallo en {nombre_agente}.")
+                            return [], "Abortado por el usuario"
+                        else:
+                            intento_actual -= 1
                         continue
 
                     if nombre_agente == "Qwen":
-                        output_agente = re.sub(r"<think>.*?</think>", "", output_agente, flags=re.DOTALL)
+                        output_agente = re.sub(r"<think>.*?</think>", "", output_agente,
+                                               flags=re.DOTALL)
 
-                    self.add_result(f"\nRespuesta del Agente {nombre_agente}:\n{output_agente}")
+                    self.agregar_resultado(
+                        f"\nRespuesta del Agente {nombre_agente}:\n{output_agente}")
 
-                    if "ERROR:" in output_agente.upper() or "NO HAY RESPUESTA" in output_agente.upper() :
-                        self.add_result(f"El agente {nombre_agente} reportó un error o no respondió. Reintentando si es posible...")
-                        if intento_actual >= max_intentos_agente: break
+                    if "ERROR:" in output_agente.upper() or "NO HAY RESPUESTA" in output_agente.upper():
+                        self.agregar_resultado(
+                            f"El agente {nombre_agente} reportó un error o no respondió.")
+                        reintentar = messagebox.askretrycancel(
+                            "Error en agente",
+                            f"El agente {nombre_agente} reportó un error o no respondió.\n\n¿Desea reintentar?"
+                        )
+                        if not reintentar:
+                            self.agregar_resultado(
+                                f"Evaluación abortada por el usuario tras fallo en {nombre_agente}.")
+                            return [], "Abortado por el usuario"
+                        else:
+                            intento_actual -= 1
                         continue
 
                     matriz_agente, exito = procesar_csv_agente(output_agente, criterios_list)
 
                     if exito:
-                        self.add_result(f"✅ CSV procesado correctamente para el agente {nombre_agente}.")
+                        self.agregar_resultado(
+                            f"✅ CSV procesado correctamente para el agente {nombre_agente}.")
                         break
                     elif intento_actual >= max_intentos_agente:
-                        self.add_result(f"Se alcanzó el número máximo de intentos ({max_intentos_agente}) para el agente {nombre_agente} o el CSV no fue válido.")
+                        self.agregar_resultado(
+                            f"Se alcanzó el número máximo de intentos ({max_intentos_agente}) para el agente {nombre_agente} o el CSV no fue válido.")
                         break
                     else:
-                        self.add_result(f"Formato CSV no válido del agente {nombre_agente}. Reintentando...")
+                        self.agregar_resultado(f"Formato CSV no válido del agente {nombre_agente}.")
+                        reintentar = messagebox.askretrycancel(
+                            "Error en agente",
+                            f"El agente {nombre_agente} devolvió un CSV no válido.\n\n¿Desea reintentar?"
+                        )
+                        if not reintentar:
+                            self.agregar_resultado(
+                                f"Evaluación abortada por el usuario tras fallo en {nombre_agente}.")
+                            return [], "Abortado por el usuario"
+                        else:
+                            intento_actual -= 1
 
                 if not matriz_agente:
-                    self.add_result(f"Generando valores lingüísticos aleatorios para el agente {nombre_agente}...")
-                    matriz_agente = generar_matriz_aleatoria(jugadores_list, criterios_list, valores_linguisticos)
-                    self.add_result(f"Se han generado valores lingüísticos aleatorios para el agente {nombre_agente}.")
+                    self.agregar_resultado(
+                        f"Generando valores lingüísticos aleatorios para el agente {nombre_agente}...")
+                    matriz_agente = generar_matriz_aleatoria(jugadores_list, criterios_list,
+                                                             valores_linguisticos)
+                    self.agregar_resultado(
+                        f"Se han generado valores lingüísticos aleatorios para el agente {nombre_agente}.")
 
                 return matriz_agente, output_agente if 'output_agente' in locals() else "No se obtuvo respuesta."
 
 
-            self.add_result("\nIniciando evaluación con los agentes...")
+            self.agregar_resultado("\nIniciando evaluación con los agentes...")
 
             matriz_agente_qwen, _ = evaluar_con_agente(
                 self.agente_qwen, prompt, jugadores, criterios, self.valores_linguisticos, "Qwen", 1) # Solo un intento para qwen
@@ -807,18 +855,20 @@ class PestañaEvaluacion(ttk.Frame):
                 self.agente_groq, prompt, jugadores, criterios, self.valores_linguisticos, "Groq", max_intentos)
 
 
-            self.add_result("\n\nAhora es tu turno de evaluar a los jugadores.")
-            self.add_result("Por favor, selecciona las calificaciones en la ventana emergente.")
+            self.agregar_resultado("\n\nAhora es tu turno de evaluar a los jugadores.")
+            self.agregar_resultado("Por favor, selecciona las calificaciones en la ventana emergente.")
 
-            user_matrices = self.get_user_evaluation(jugadores, criterios)
+            user_matrices = self.get_user_evaluacion(jugadores, criterios)
 
             if not user_matrices:
-                self.add_result("Evaluación cancelada por el usuario.")
+                self.agregar_resultado("Evaluación cancelada por el usuario.")
                 if hasattr(self, 'evaluate_button') and self.evaluate_button.winfo_exists():
                     self.evaluate_button.config(state=tk.NORMAL)
                 return
 
             matriz_usuario = user_matrices
+
+
 
             matrices = {
                 "Usuario": matriz_usuario,
@@ -827,12 +877,12 @@ class PestañaEvaluacion(ttk.Frame):
                 "Groq": matriz_agente_groq
             }
 
-            self.add_result("\nCalculando matrices FLPR...")
+            self.agregar_resultado("\nCalculando matrices FLPR...")
 
             flpr_matrices = {}
             for nombre, matriz_eval in matrices.items():
                 if not matriz_eval or not any(matriz_eval):
-                    self.add_result(f"ADVERTENCIA: Matriz de evaluación para '{nombre}' está vacía. Saltando cálculo de FLPR.")
+                    self.agregar_resultado(f"ADVERTENCIA: Matriz de evaluación para '{nombre}' está vacía. Saltando cálculo de FLPR.")
                     flpr_matrices[nombre] = None
                     continue
 
@@ -842,7 +892,7 @@ class PestañaEvaluacion(ttk.Frame):
                         calificaciones_criterio = [fila[idx] for fila in matriz_eval if len(fila) > idx]
 
                         if not calificaciones_criterio:
-                             self.add_result(f"ADVERTENCIA: No hay calificaciones para el criterio '{criterio_item}' en la matriz de '{nombre}'.")
+                             self.agregar_resultado(f"ADVERTENCIA: No hay calificaciones para el criterio '{criterio_item}' en la matriz de '{nombre}'.")
                              continue
 
                         flpr_criterio = generar_flpr(calificaciones_criterio)
@@ -853,7 +903,7 @@ class PestañaEvaluacion(ttk.Frame):
                             flpr_matriz_calculada = calcular_flpr_comun(flpr_matriz_calculada, flpr_criterio)
                     flpr_matrices[nombre] = flpr_matriz_calculada
                 else:
-                    self.add_result(f"ADVERTENCIA: No se pudo calcular FLPR para '{nombre}' debido a discrepancia en criterios o estructura de matriz.")
+                    self.agregar_resultado(f"ADVERTENCIA: No se pudo calcular FLPR para '{nombre}' debido a discrepancia en criterios o estructura de matriz.")
                     flpr_matrices[nombre] = None
 
 
@@ -865,7 +915,7 @@ class PestañaEvaluacion(ttk.Frame):
             flpr_validas_agentes = [f for f in [flpr_agente_qwen, flpr_agente_gemini, flpr_agente_groq] if f is not None]
 
             if len(flpr_validas_agentes) < 2:
-                self.add_result("ADVERTENCIA: No hay suficientes FLPRs de agentes válidas para calcular FLPR común de agentes.")
+                self.agregar_resultado("ADVERTENCIA: No hay suficientes FLPRs de agentes válidas para calcular FLPR común de agentes.")
                 flpr_agentes = None
             elif len(flpr_validas_agentes) == 2:
                 flpr_agentes = calcular_flpr_comun(flpr_validas_agentes[0], flpr_validas_agentes[1])
@@ -878,12 +928,12 @@ class PestañaEvaluacion(ttk.Frame):
                 flpr_colectiva = calcular_flpr_comun(flpr_agentes, flpr_usuario)
             elif flpr_agentes is not None:
                 flpr_colectiva = flpr_agentes
-                self.add_result("ADVERTENCIA: Usando FLPR de agentes como colectiva debido a FLPR de usuario no válida.")
+                self.agregar_resultado("ADVERTENCIA: Usando FLPR de agentes como colectiva debido a FLPR de usuario no válida.")
             elif flpr_usuario is not None:
                 flpr_colectiva = flpr_usuario
-                self.add_result("ADVERTENCIA: Usando FLPR de usuario como colectiva debido a FLPR de agentes no válida.")
+                self.agregar_resultado("ADVERTENCIA: Usando FLPR de usuario como colectiva debido a FLPR de agentes no válida.")
             else:
-                self.add_result("ERROR CRÍTICO: No se pudieron calcular FLPRs válidas. No se puede continuar con el ranking.")
+                self.agregar_resultado("ERROR CRÍTICO: No se pudieron calcular FLPRs válidas. No se puede continuar con el ranking.")
                 if hasattr(self, 'evaluate_button') and self.evaluate_button.winfo_exists():
                     self.evaluate_button.config(state=tk.NORMAL)
                 return
@@ -896,8 +946,8 @@ class PestañaEvaluacion(ttk.Frame):
             if flpr_agente_qwen is not None and flpr_agente_groq is not None: matrices_similitud_validas.append(calcular_matriz_similitud(flpr_agente_qwen, flpr_agente_groq))
             if flpr_agente_gemini is not None and flpr_agente_groq is not None: matrices_similitud_validas.append(calcular_matriz_similitud(flpr_agente_gemini, flpr_agente_groq))
 
-            self.add_result("\n=== Revisión de Matrices de Agentes ===")
-            self.add_result("Antes de calcular el consenso global, puedes revisar las matrices de los "
+            self.agregar_resultado("\n=== Revisión de Matrices de Agentes ===")
+            self.agregar_resultado("Antes de calcular el consenso global, puedes revisar las matrices de los "
                             "agentes para detectar y corregir posibles sesgos.")
 
             matrices_originales = {
@@ -907,10 +957,10 @@ class PestañaEvaluacion(ttk.Frame):
                 "Agente Groq": matriz_agente_groq
             }
 
-            matrices_revisadas = self.review_agent_matrices(jugadores, criterios, matrices_originales)
+            matrices_revisadas = self.revisar_matrices_agentes(jugadores, criterios, matrices_originales)
 
             if matrices_revisadas is not None:
-                self.add_result("Aplicando cambios de la revisión de matrices y recalculando FLPRs...")
+                self.agregar_resultado("Aplicando cambios de la revisión de matrices y recalculando FLPRs...")
 
                 matriz_usuario = matrices_revisadas.get("Usuario", matriz_usuario)
                 matriz_agente_qwen = matrices_revisadas.get("Agente Qwen", matriz_agente_qwen)
@@ -940,64 +990,33 @@ class PestañaEvaluacion(ttk.Frame):
                 if flpr_agente_gemini is not None and flpr_agente_groq is not None: matrices_similitud_validas.append(calcular_matriz_similitud(flpr_agente_gemini, flpr_agente_groq))
 
             if not matrices_similitud_validas:
-                self.add_result("ERROR: No se pudieron calcular matrices de similitud. No se puede determinar el consenso.")
+                self.agregar_resultado("ERROR: No se pudieron calcular matrices de similitud. No se puede determinar el consenso.")
                 cr, consenso_alcanzado = 0, False
             else:
                 cr, consenso_alcanzado = calcular_cr(matrices_similitud_validas, consenso_minimo)
 
 
-            self.add_result(f"\n=== Nivel de Consenso ===")
-            self.add_result(f"Nivel de consenso (CR): {cr:.3f}") # Formatear CR
-            self.add_result(f"Consenso mínimo requerido: {consenso_minimo}")
+            self.agregar_resultado(f"\n=== Nivel de Consenso ===")
+            self.agregar_resultado(f"Nivel de consenso (CR): {cr:.3f}")
+            self.agregar_resultado(f"Consenso mínimo requerido: {consenso_minimo}")
 
-            self.add_result(f"\n=== Ranking de Agentes por Distancia al Consenso ===")
-            self.add_result("Este ranking muestra qué agentes están más lejos de la opinión colectiva:")
-
-            distancias_agentes = []
-
-            if flpr_usuario is not None and flpr_colectiva is not None:
-                similitud_usuario = np.mean(calcular_matriz_similitud(flpr_usuario, flpr_colectiva))
-                distancia_usuario = 1 - similitud_usuario
-                distancias_agentes.append(("Usuario", distancia_usuario))
-
-            if flpr_agente_qwen is not None and flpr_colectiva is not None:
-                similitud_qwen = np.mean(calcular_matriz_similitud(flpr_agente_qwen, flpr_colectiva))
-                distancia_qwen = 1 - similitud_qwen
-                distancias_agentes.append(("Agente Qwen", distancia_qwen))
-
-            if flpr_agente_gemini is not None and flpr_colectiva is not None:
-                similitud_gemini = np.mean(calcular_matriz_similitud(flpr_agente_gemini, flpr_colectiva))
-                distancia_gemini = 1 - similitud_gemini
-                distancias_agentes.append(("Agente Gemini", distancia_gemini))
-
-            if flpr_agente_groq is not None and flpr_colectiva is not None:
-                similitud_groq = np.mean(calcular_matriz_similitud(flpr_agente_groq, flpr_colectiva))
-                distancia_groq = 1 - similitud_groq
-                distancias_agentes.append(("Agente Groq", distancia_groq))
-
-            distancias_agentes.sort(key=lambda x: x[1], reverse=True)
-
-            for posicion, (agente, distancia) in enumerate(distancias_agentes, 1):
-                self.add_result(f"{posicion}. {agente} - Distancia al consenso: {distancia:.3f}")
-
-            if distancias_agentes:
-                agente_mas_lejano = distancias_agentes[0][0]
-                distancia_maxima = distancias_agentes[0][1]
-                self.add_result(f"\nEl agente que más influye en reducir el consenso global es: {agente_mas_lejano} (distancia: {distancia_maxima:.3f})")
+            self.mostrar_distancias_al_consenso(
+                flpr_usuario, flpr_agente_qwen, flpr_agente_gemini, flpr_agente_groq, flpr_colectiva
+            )
 
             if consenso_alcanzado:
-                self.add_result("✅ Se ha alcanzado el nivel mínimo de consenso.")
+                self.agregar_resultado("Se ha alcanzado el nivel mínimo de consenso.")
                 if flpr_colectiva is not None:
-                    self.add_result("\n=== Ranking de Jugadores ===")
+                    self.agregar_resultado("\n=== Ranking de Jugadores ===")
                     ranking = calcular_ranking_jugadores(flpr_colectiva, jugadores)
-                    self.add_result("TOP JUGADORES (de mejor a peor):")
+                    self.agregar_resultado("TOP JUGADORES (de mejor a peor):")
                     for posicion, (jugador, puntuacion) in enumerate(ranking, 1):
-                        self.add_result(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
+                        self.agregar_resultado(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
                 else:
-                    self.add_result("No se puede generar ranking debido a FLPR colectiva no válida.")
+                    self.agregar_resultado("No se puede generar ranking debido a FLPR colectiva no válida.")
             else:
-                self.add_result("❌ No se ha alcanzado el nivel mínimo de consenso.")
-                self.add_result("\n=== Iniciando fase de discusión y re-evaluación ===")
+                self.agregar_resultado("No se ha alcanzado el nivel mínimo de consenso.")
+                self.agregar_resultado("\n=== Iniciando fase de discusión y re-evaluación ===")
 
                 ronda_actual = 1
                 consenso_alcanzado_nuevo = False
@@ -1013,7 +1032,7 @@ class PestañaEvaluacion(ttk.Frame):
                 matriz_agente_groq_actual = matriz_agente_groq
 
                 while ronda_actual <= max_rondas and not consenso_alcanzado_nuevo:
-                    self.add_result(f"\n\n=== RONDA DE DISCUSIÓN {ronda_actual}/{max_rondas} ===")
+                    self.agregar_resultado(f"\n\n=== RONDA DE DISCUSIÓN {ronda_actual}/{max_rondas} ===")
 
                     def formatear_calificaciones(jugadores_list, criterios_list, matriz, nombre_agente):
                         calificaciones_str = f"Mis calificaciones como agente {nombre_agente} para los jugadores son:\n"
@@ -1035,9 +1054,15 @@ class PestañaEvaluacion(ttk.Frame):
                             calificaciones_usuario_str += f"{criterio}: {matriz_usuario_actual[i][j]}, "
                         calificaciones_usuario_str = calificaciones_usuario_str.rstrip(", ") + "\n"
 
-                    self.add_result("Informando a los agentes sobre las calificaciones actuales...")
+                    self.agregar_resultado("Informando a los agentes sobre las calificaciones actuales...")
+                    self.agente_qwen.invoke({"input": f"Estas son las calificaciones que has dado TU a los jugadores:\n{calificaciones_qwen_str}\n"
+                        "No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Qwen recordadas'."})
+                    self.agente_gemini.invoke({"input": f"Estas son las calificaciones que has dado TU a los jugadores:\n{calificaciones_gemini_str}\n"
+                        "No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Gemini recordadas'."})
+                    self.agente_groq.invoke({"input": f"Estas son las calificaciones que has dado TU a los jugadores:\n{calificaciones_groq_str}\n"
+                        "No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Groq recordadas'."})
 
-                    # Informar a cada agente sobre sus propias calificaciones y las de los demás
+                    # Informar a cada agente sobre las calificaciones del usuario
                     self.agente_qwen.invoke({"input": f"Recuerda estas calificaciones que ha dado el usuario: {calificaciones_usuario_str}\n"
                         "No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del usuario recordadas'."})
 
@@ -1066,11 +1091,11 @@ class PestañaEvaluacion(ttk.Frame):
                     self.agente_groq.invoke({"input": f"El agente Gemini ha dado estas calificaciones: {calificaciones_gemini_str}\n "
                                             f"No uses ninguna tool ni evalues a los jugadores, solo responde: 'Calificaciones del agente Gemini recordadas'."})
 
-                    self.add_result(f"\n=== Discusión sobre las valoraciones (Ronda {ronda_actual}/{max_rondas}) ===")
-                    self.add_result("Ahora puedes discutir con los agentes sobre las valoraciones realizadas.")
+                    self.agregar_resultado(f"\n=== Discusión sobre las valoraciones (Ronda {ronda_actual}/{max_rondas}) ===")
+                    self.agregar_resultado("Ahora puedes discutir con los agentes sobre las valoraciones realizadas.")
 
                     discusion_window = tk.Toplevel(self.master)
-                    discusion_window.configure(background=self.colors["bg_dark_widget"])
+                    discusion_window.configure(background=self.colores["bg_dark_widget"])
                     discusion_window.title(f"Discusión sobre valoraciones - Ronda {ronda_actual}/{max_rondas}")
                     discusion_window.geometry("800x600")
                     discusion_window.transient(self.master)
@@ -1097,7 +1122,7 @@ class PestañaEvaluacion(ttk.Frame):
                     conversation_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
                     conversation_text = tk.Text(conversation_frame, wrap=tk.WORD, width=80, height=15,
-                                              bg=self.colors["bg_dark_widget"], fg=self.colors["fg_light"])
+                                              bg=self.colores["bg_dark_widget"], fg=self.colores["fg_light"])
                     conversation_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
                     scrollbar = ttk.Scrollbar(conversation_frame, command=conversation_text.yview)
@@ -1108,7 +1133,7 @@ class PestañaEvaluacion(ttk.Frame):
                     input_frame.pack(fill=tk.X, pady=(10, 0))
 
                     user_input = tk.Text(input_frame, wrap=tk.WORD, width=80, height=3,
-                                       bg=self.colors["bg_dark_entry"], fg=self.colors["fg_light"])
+                                       bg=self.colores["bg_dark_entry"], fg=self.colores["fg_light"])
                     user_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
 
                     conversation_history = []
@@ -1128,7 +1153,7 @@ class PestañaEvaluacion(ttk.Frame):
 
                         prompt_discusion = f"""
                             Basándote en las calificaciones y la discusión anterior, por favor, responde a la siguiente pregunta: {message}
-                            No uses ninguna tool ni evalúes a los jugadores, solo responde esta pregunta.
+                            No uses ninguna tool si no se pide explicitamente, solo responde esta pregunta.
                             Tu objetivo es evaluar críticamente las afirmaciones del usuario.
                             Si el usuario dice algo incorrecto o sin sentido, discútelo y explica por qué no estás de acuerdo.
                             Proporciona argumentos claros y basados en datos o lógica. No aceptes afirmaciones sin fundamento.
@@ -1144,6 +1169,8 @@ class PestañaEvaluacion(ttk.Frame):
                         if agent_name == "Qwen":
                             respuesta = self.agente_qwen.invoke({"input": prompt_discusion})
                             agent_response = respuesta.get("output", "No hay respuesta")
+                            agent_response = re.sub(r"<think>.*?</think>", "", agent_response,
+                                                    flags=re.DOTALL)
                         elif agent_name == "Gemini":
                             respuesta = self.agente_gemini.invoke({"input": prompt_discusion})
                             agent_response = respuesta.get("output", "No hay respuesta")
@@ -1189,11 +1216,11 @@ class PestañaEvaluacion(ttk.Frame):
                     self.master.wait_window(discusion_window)
 
                     if not continue_reevaluation[0]:
-                        self.add_result("\nDiscusión cancelada. Finalizando evaluación.")
+                        self.agregar_resultado("\nDiscusión cancelada. Finalizando evaluación.")
                         break
 
-                    self.add_result(f"\n=== Re-evaluación de jugadores (Ronda {ronda_actual}/{max_rondas}) ===")
-                    self.add_result("Los agentes volverán a evaluar a los jugadores basándose en la discusión anterior.")
+                    self.agregar_resultado(f"\n=== Re-evaluación de jugadores (Ronda {ronda_actual}/{max_rondas}) ===")
+                    self.agregar_resultado("Los agentes volverán a evaluar a los jugadores basándose en la discusión anterior.")
 
                     prompt_reevaluacion_qwen = f"""
                     Basándote en nuestra discusión anterior sobre las valoraciones de los jugadores, 
@@ -1245,33 +1272,33 @@ class PestañaEvaluacion(ttk.Frame):
 
                     max_intentos_reevaluacion = 3
 
-                    self.add_result(f"\n=== Re-evaluación con el Agente Qwen (Ronda {ronda_actual}/{max_rondas}) ===")
+                    self.agregar_resultado(f"\n=== Re-evaluación con el Agente Qwen (Ronda {ronda_actual}/{max_rondas}) ===")
                     matriz_agente_qwen_nueva, output_reevaluacion_qwen = evaluar_con_agente(
                         self.agente_qwen, prompt_reevaluacion_qwen, jugadores, criterios, self.valores_linguisticos, "Qwen", max_intentos_reevaluacion)
 
-                    self.add_result("\n=== Nueva evaluación del agente Qwen ===")
-                    self.add_result(output_reevaluacion_qwen)
+                    self.agregar_resultado("\n=== Nueva evaluación del agente Qwen ===")
+                    self.agregar_resultado(output_reevaluacion_qwen)
 
-                    self.add_result(f"\n=== Re-evaluación con el Agente Gemini (Ronda {ronda_actual}/{max_rondas}) ===")
+                    self.agregar_resultado(f"\n=== Re-evaluación con el Agente Gemini (Ronda {ronda_actual}/{max_rondas}) ===")
                     matriz_agente_gemini_nueva, output_reevaluacion_gemini = evaluar_con_agente(
                         self.agente_gemini, prompt_reevaluacion_gemini, jugadores, criterios, self.valores_linguisticos, "Gemini", max_intentos_reevaluacion)
 
-                    self.add_result("\n=== Nueva evaluación del agente Gemini ===")
-                    self.add_result(output_reevaluacion_gemini)
+                    self.agregar_resultado("\n=== Nueva evaluación del agente Gemini ===")
+                    self.agregar_resultado(output_reevaluacion_gemini)
 
-                    self.add_result(f"\n=== Re-evaluación con el Agente Groq (Ronda {ronda_actual}/{max_rondas}) ===")
+                    self.agregar_resultado(f"\n=== Re-evaluación con el Agente Groq (Ronda {ronda_actual}/{max_rondas}) ===")
                     matriz_agente_groq_nueva, output_reevaluacion_groq = evaluar_con_agente(
                         self.agente_groq, prompt_reevaluacion_groq, jugadores, criterios, self.valores_linguisticos, "Groq", max_intentos_reevaluacion)
 
-                    self.add_result("\n=== Nueva evaluación del agente Groq ===")
-                    self.add_result(output_reevaluacion_groq)
+                    self.agregar_resultado("\n=== Nueva evaluación del agente Groq ===")
+                    self.agregar_resultado(output_reevaluacion_groq)
 
-                    self.add_result(f"\n=== Re-evaluación del usuario (Ronda {ronda_actual}/{max_rondas}) ===")
-                    self.add_result("Ahora es tu turno de volver a evaluar a los jugadores después de la discusión.")
+                    self.agregar_resultado(f"\n=== Re-evaluación del usuario (Ronda {ronda_actual}/{max_rondas}) ===")
+                    self.agregar_resultado("Ahora es tu turno de volver a evaluar a los jugadores después de la discusión.")
 
-                    matriz_usuario_nueva = self.get_user_evaluation(jugadores, criterios)
+                    matriz_usuario_nueva = self.get_user_evaluacion(jugadores, criterios)
                     if matriz_usuario_nueva is None:
-                        self.add_result("❌ Re-evaluación del usuario cancelada. Finalizando evaluación.")
+                        self.agregar_resultado("Re-evaluación del usuario cancelada. Finalizando evaluación.")
                         break
 
                     matrices_nuevas = {
@@ -1288,14 +1315,10 @@ class PestañaEvaluacion(ttk.Frame):
                     flpr_agente_gemini_nueva = flpr_matrices_nuevas["Agente Gemini"]
                     flpr_agente_groq_nueva = flpr_matrices_nuevas["Agente Groq"]
 
-                    self.add_result(f"\n=== Matriz FLPR Final del Usuario (Después de la ronda {ronda_actual} de discusión) ===")
-
                     flpr_agentes_qwen_gemini_nueva = calcular_flpr_comun(flpr_agente_qwen_nueva, flpr_agente_gemini_nueva)
                     flpr_agentes_nueva = calcular_flpr_comun(flpr_agentes_qwen_gemini_nueva, flpr_agente_groq_nueva)
-                    self.add_result(f"\n=== Matriz FLPR Colectiva (Agentes) (Después de la ronda {ronda_actual} de discusión) ===")
 
                     flpr_colectiva_nueva = calcular_flpr_comun(flpr_agentes_nueva, flpr_usuario_nueva)
-                    self.add_result(f"\n=== Matriz FLPR Colectiva (Usuario y Agentes) (Después de la ronda {ronda_actual} de discusión) ===")
 
                     matrices_similitud_nuevas = []
                     if flpr_usuario_nueva is not None and flpr_agente_qwen_nueva is not None: matrices_similitud_nuevas.append(calcular_matriz_similitud(flpr_usuario_nueva, flpr_agente_qwen_nueva))
@@ -1306,26 +1329,33 @@ class PestañaEvaluacion(ttk.Frame):
                     if flpr_agente_gemini_nueva is not None and flpr_agente_groq_nueva is not None: matrices_similitud_nuevas.append(calcular_matriz_similitud(flpr_agente_gemini_nueva, flpr_agente_groq_nueva))
 
                     if not matrices_similitud_nuevas:
-                        self.add_result("ERROR: No se pudieron calcular matrices de similitud nuevas. No se puede determinar el consenso.")
+                        self.agregar_resultado("ERROR: No se pudieron calcular matrices de similitud nuevas. No se puede determinar el consenso.")
                         cr_nuevo, consenso_alcanzado_nuevo = 0, False
                     else:
                         cr_nuevo, consenso_alcanzado_nuevo = calcular_cr(matrices_similitud_nuevas, consenso_minimo)
 
-                    self.add_result(f"\n=== Nivel de Consenso (Después de la ronda {ronda_actual} de discusión) ===")
-                    self.add_result(f"Nivel de consenso (CR): {cr_nuevo:.3f}")
-                    self.add_result(f"Consenso mínimo requerido: {consenso_minimo}")
+                    self.agregar_resultado(f"\n=== Nivel de Consenso (Después de la ronda {ronda_actual} de discusión) ===")
+                    self.agregar_resultado(f"Nivel de consenso (CR): {cr_nuevo:.3f}")
+                    self.agregar_resultado(f"Consenso mínimo requerido: {consenso_minimo}")
+
+                    self.mostrar_distancias_al_consenso(
+                        flpr_usuario, flpr_agente_qwen, flpr_agente_gemini, flpr_agente_groq,
+                        flpr_colectiva
+                    )
 
                     if consenso_alcanzado_nuevo:
-                        self.add_result("✅ Se ha alcanzado el nivel mínimo de consenso.")
+                        self.agregar_resultado("Se ha alcanzado el nivel mínimo de consenso.")
                     else:
-                        self.add_result("❌ No se ha alcanzado el nivel mínimo de consenso.")
+                        self.agregar_resultado("No se ha alcanzado el nivel mínimo de consenso.")
 
                     if cr_nuevo > cr:
-                        self.add_result(f"\nEl nivel de consenso ha mejorado después de la discusión: {cr:.3f} → {cr_nuevo:.3f}")
+                        self.agregar_resultado(f"\nEl nivel de consenso ha mejorado después de la discusión: {cr:.3f} → {cr_nuevo:.3f}")
+                        cr = cr_nuevo
                     elif cr_nuevo < cr:
-                        self.add_result(f"\nEl nivel de consenso ha disminuido después de la discusión: {cr:.3f} → {cr_nuevo:.3f}")
+                        self.agregar_resultado(f"\nEl nivel de consenso ha disminuido después de la discusión: {cr:.3f} → {cr_nuevo:.3f}")
+                        cr = cr_nuevo
                     else:
-                        self.add_result(f"\nEl nivel de consenso se ha mantenido igual después de la discusión: {cr:.3f}")
+                        self.agregar_resultado(f"\nEl nivel de consenso se ha mantenido igual después de la discusión: {cr:.3f}")
 
                     flpr_usuario_actual = flpr_usuario_nueva
                     flpr_agente_qwen_actual = flpr_agente_qwen_nueva
@@ -1337,22 +1367,30 @@ class PestañaEvaluacion(ttk.Frame):
                     matriz_agente_gemini_actual = matriz_agente_gemini_nueva
                     matriz_agente_groq_actual = matriz_agente_groq_nueva
 
+                    self.mostrar_distancias_al_consenso(
+                        flpr_usuario_actual,
+                        flpr_agente_qwen_actual,
+                        flpr_agente_gemini_actual,
+                        flpr_agente_groq_actual,
+                        flpr_colectiva_actual
+                    )
+
                     ronda_actual += 1
 
                     if consenso_alcanzado_nuevo or ronda_actual > max_rondas:
-                        self.add_result("\n=== Ranking de Jugadores (Después de la discusión) ===")
+                        self.agregar_resultado("\n=== Ranking de Jugadores (Después de la discusión) ===")
                         ranking = calcular_ranking_jugadores(flpr_colectiva_nueva, jugadores)
 
-                        self.add_result("TOP JUGADORES (de mejor a peor):")
+                        self.agregar_resultado("TOP JUGADORES (de mejor a peor):")
                         for posicion, (jugador, puntuacion) in enumerate(ranking, 1):
-                            self.add_result(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
+                            self.agregar_resultado(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
 
                         if not consenso_alcanzado_nuevo and ronda_actual > max_rondas:
-                            self.add_result(f"\n⚠️ Se ha alcanzado el número máximo de rondas de discusión ({max_rondas}) sin llegar al consenso mínimo requerido.")
-                            self.add_result(f"Nivel de consenso actual: {cr_nuevo:.3f}")
+                            self.agregar_resultado(f"\nSe ha alcanzado el número máximo de rondas de discusión ({max_rondas}) sin llegar al consenso mínimo requerido.")
+                            self.agregar_resultado(f"Nivel de consenso actual: {cr_nuevo:.3f}")
 
-                            self.add_result("\n=== Última oportunidad para corregir sesgos ===")
-                            self.add_result("Puedes revisar y modificar las matrices de términos lingüísticos una última vez antes de calcular el ranking final.")
+                            self.agregar_resultado("\n=== Última oportunidad para corregir sesgos ===")
+                            self.agregar_resultado("Puedes revisar y modificar las matrices de términos lingüísticos una última vez antes de calcular el ranking final.")
 
                             matrices_finales = {
                                 "Usuario": matriz_usuario_actual,
@@ -1361,7 +1399,7 @@ class PestañaEvaluacion(ttk.Frame):
                                 "Agente Groq": matriz_agente_groq_actual
                             }
 
-                            matrices_revisadas_final = self.review_agent_matrices(jugadores, criterios, matrices_finales)
+                            matrices_revisadas_final = self.revisar_matrices_agentes(jugadores, criterios, matrices_finales)
 
                             if matrices_revisadas_final is not None:
                                 flpr_matrices_final = calcular_matrices_flpr(matrices_revisadas_final, criterios)
@@ -1384,59 +1422,64 @@ class PestañaEvaluacion(ttk.Frame):
                                 if flpr_agente_gemini_final is not None and flpr_agente_groq_final is not None: matrices_similitud_final.append(calcular_matriz_similitud(flpr_agente_gemini_final, flpr_agente_groq_final))
 
                                 if not matrices_similitud_final:
-                                    self.add_result("ERROR: No se pudieron calcular matrices de similitud finales. No se puede determinar el consenso.")
+                                    self.agregar_resultado("ERROR: No se pudieron calcular matrices de similitud finales. No se puede determinar el consenso.")
                                     cr_final, consenso_alcanzado_final = 0, False
                                 else:
                                     cr_final, consenso_alcanzado_final = calcular_cr(matrices_similitud_final, consenso_minimo)
 
-                                self.add_result(f"\n=== Nivel de Consenso (Después de modificaciones finales) ===")
-                                self.add_result(f"Nivel de consenso (CR): {cr_final:.3f}")
-                                self.add_result(f"Consenso mínimo requerido: {consenso_minimo}")
+                                self.agregar_resultado(f"\n=== Nivel de Consenso (Después de modificaciones finales) ===")
+                                self.agregar_resultado(f"Nivel de consenso (CR): {cr_final:.3f}")
+                                self.agregar_resultado(f"Consenso mínimo requerido: {consenso_minimo}")
 
                                 if consenso_alcanzado_final:
-                                    self.add_result("✅ Se ha alcanzado el nivel mínimo de consenso.")
+                                    self.agregar_resultado("Se ha alcanzado el nivel mínimo de consenso.")
                                 else:
-                                    self.add_result("❌ No se ha alcanzado el nivel mínimo de consenso.")
+                                    self.agregar_resultado("No se ha alcanzado el nivel mínimo de consenso.")
 
-                                self.add_result("\n=== Ranking de Jugadores (Actualizado) ===")
+                                self.agregar_resultado("\n=== Ranking de Jugadores (Actualizado) ===")
                                 ranking_final = calcular_ranking_jugadores(flpr_colectiva_final, jugadores)
 
-                                self.add_result("TOP JUGADORES (de mejor a peor):")
+                                self.agregar_resultado("TOP JUGADORES (de mejor a peor):")
                                 for posicion, (jugador, puntuacion) in enumerate(ranking_final, 1):
-                                    self.add_result(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
+                                    self.agregar_resultado(f"{posicion}. {jugador} - Puntuación: {puntuacion:.3f}")
 
-                                self.add_result(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_final:.3f}")
+                                self.agregar_resultado(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_final:.3f}")
                             else:
-                                self.add_result(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_nuevo:.3f}")
+                                self.agregar_resultado(f"\nSe muestra el ranking con el nivel de consenso actual: {cr_nuevo:.3f}")
 
                 if consenso_alcanzado:
-                    self.add_result("\nSe ha alcanzado el nivel mínimo de consenso. No es necesario realizar la discusión y re-evaluación.")
+                    self.agregar_resultado("\nSe ha alcanzado el nivel mínimo de consenso. No es necesario realizar la discusión y re-evaluación.")
 
 
-            self.add_result("\nEvaluación completada.")
+            self.agregar_resultado("\nEvaluación completada.")
 
             self.resultados_evaluacion = {
-
+                "matrices": matrices_revisadas_final if 'matrices_revisadas_final' in locals() and matrices_revisadas_final is not None
+                else matrices_nuevas if 'matrices_nuevas' in locals() and matrices_nuevas is not None
+                else matrices,
+                "discusiones": conversation_history if 'conversation_history' in locals() else None,
+                "crs": cr_final if 'cr_final' in locals() else cr_nuevo if 'cr_nuevo' in locals() else cr,
+                "ranking": ranking_final if 'ranking_final' in locals() else ranking if 'ranking' in locals() else [],
             }
 
-            self.export_pdf_button.config(state=tk.NORMAL)
+            self.boton_exportar_pdf.config(state=tk.NORMAL)
 
         except Exception as e:
-            self.add_result(f"Error durante la evaluación: {str(e)}")
+            self.agregar_resultado(f"Error durante la evaluación: {str(e)}")
             import traceback
-            self.add_result(f"Traceback: {traceback.format_exc()}")
+            self.agregar_resultado(f"Traceback: {traceback.format_exc()}")
         finally:
             if hasattr(self, 'evaluate_button') and self.evaluate_button.winfo_exists():
                  self.evaluate_button.config(state=tk.NORMAL)
 
 
-    def get_user_evaluation(self, jugadores, criterios):
+    def get_user_evaluacion(self, jugadores, criterios):
         """
         Muestra una ventana emergente para que el usuario evalúe a los jugadores.
         Retorna la matriz de evaluación del usuario.
         """
         eval_window = tk.Toplevel(self.master)
-        eval_window.configure(background=self.colors["bg_dark_widget"])
+        eval_window.configure(background=self.colores["bg_dark_widget"])
         eval_window.title("Evaluación de Jugadores")
         eval_window.geometry("700x450") # Tamaño ajustado
         eval_window.transient(self.master) # O self
@@ -1500,7 +1543,7 @@ class PestañaEvaluacion(ttk.Frame):
 
         return result_matrix[0]
 
-    def review_agent_matrices(self, jugadores, criterios, matrices):
+    def revisar_matrices_agentes(self, jugadores, criterios, matrices):
         """
         Muestra una ventana emergente para que el usuario revise y modifique las matrices de los agentes.
         Permite detectar y corregir sesgos antes de calcular el consenso.
@@ -1513,11 +1556,11 @@ class PestañaEvaluacion(ttk.Frame):
         Returns:
             dict: Diccionario con las matrices modificadas
         """
-        self.add_result("\n=== Revisión de Matrices de Agentes ===")
-        self.add_result("Puedes revisar las matrices de términos lingüísticos para identificar posibles sesgos.")
+        self.agregar_resultado("\n=== Revisión de Matrices de Agentes ===")
+        self.agregar_resultado("Puedes revisar las matrices de términos lingüísticos para identificar posibles sesgos.")
 
         review_window = tk.Toplevel(self.master)
-        review_window.configure(background=self.colors["bg_dark_widget"])
+        review_window.configure(background=self.colores["bg_dark_widget"])
         review_window.title("Revisión de Matrices de Agentes")
         review_window.geometry("800x600")
         review_window.transient(self.master)
@@ -1550,7 +1593,7 @@ class PestañaEvaluacion(ttk.Frame):
         scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
 
         canvas = tk.Canvas(table_container, yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set,
-                          background=self.colors["bg_dark_widget"])
+                          background=self.colores["bg_dark_widget"])
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         scrollbar_y.config(command=canvas.yview)
@@ -1561,7 +1604,7 @@ class PestañaEvaluacion(ttk.Frame):
 
         matrix_vars = {}
 
-        def show_selected_matrix():
+        def mostrar_matriz_seleccionada():
             for widget in table_frame.winfo_children():
                 widget.destroy()
 
@@ -1600,18 +1643,18 @@ class PestañaEvaluacion(ttk.Frame):
             table_frame.update_idletasks()
             canvas.config(scrollregion=canvas.bbox("all"))
 
-        matrix_selector.bind("<<ComboboxSelected>>", lambda e: show_selected_matrix())
+        matrix_selector.bind("<<ComboboxSelected>>", lambda e: mostrar_matriz_seleccionada())
 
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(15, 0))
 
         result_matrices = [None]
 
-        def on_cancel():
+        def al_cancelar():
             result_matrices[0] = None
             review_window.destroy()
 
-        def on_submit():
+        def al_enviar():
             modified_matrices = {}
             for matrix_name, vars_matrix in matrix_vars.items():
                 modified_matrix = []
@@ -1623,21 +1666,21 @@ class PestañaEvaluacion(ttk.Frame):
             result_matrices[0] = modified_matrices
             review_window.destroy()
 
-        cancel_button = ttk.Button(button_frame, text="Cancelar", command=on_cancel)
+        cancel_button = ttk.Button(button_frame, text="Cancelar", command=al_cancelar)
         cancel_button.pack(side=tk.LEFT, padx=5, expand=True)
 
-        submit_button = ttk.Button(button_frame, text="Guardar Cambios", command=on_submit)
+        submit_button = ttk.Button(button_frame, text="Guardar Cambios", command=al_enviar)
         submit_button.pack(side=tk.RIGHT, padx=5, expand=True)
 
-        show_selected_matrix()
+        mostrar_matriz_seleccionada()
 
         self.master.wait_window(review_window)
 
         if result_matrices[0] is not None:
-            self.add_result("✅ Matrices revisadas y modificadas correctamente.")
+            self.agregar_resultado("Matrices revisadas y modificadas correctamente.")
             return result_matrices[0]
         else:
-            self.add_result("❌ Revisión de matrices cancelada.")
+            self.agregar_resultado("Revisión de matrices cancelada.")
             return matrices
 
 
